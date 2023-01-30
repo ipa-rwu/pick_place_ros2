@@ -1,0 +1,22 @@
+pick_place_demo:
+# /**:
+  ros__parameters:
+    arm_group_name: "arm"
+    hand_group_name: "hand"
+    hand_frame: "tool0"
+    object_name: "object"
+    end_effector_name: "hand"
+    hand_open_pose: "open"
+    hand_close_pose: "close"
+    object_frame_id: "base_link"
+    place_frame_id: "base_link"
+    gripper_io_server: "~/set_io"
+    place_pose: [-0.25, 0.6, 0.0, 1.0, 0.0, 0.0, 0.0]
+    object_pose: [0.25, 0.6, 0.05, 1.0, 0.0, 0.0, 0.0]
+    detect_state_name: "detect"
+    ik_frame: "tool0"
+    planning_plugin: "ompl_interface/OMPLPlanner"
+    show_trajectory: false
+    planning_timeout: 5.0
+    num_planning_attempts: 3
+    pick_offset: 0.02
