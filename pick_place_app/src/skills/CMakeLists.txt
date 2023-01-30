@@ -1,0 +1,31 @@
+add_library(${PROJECT_NAME}_skills SHARED
+	${PROJECT_INCLUDE}/skills/compute_path_skill.h
+	${PROJECT_INCLUDE}/skills/utils.h
+	${PROJECT_INCLUDE}/skills/execute_trajectory_skill.h
+
+
+	compute_path_skill.cpp
+	utils.cpp
+	execute_trajectory_skill.cpp
+)
+
+set(SKILL_DEPS
+	ament_cmake
+	rclcpp
+	pluginlib
+	rclcpp_components
+	rosparam_shortcuts
+	moveit_core
+	moveit_ros_planning_interface
+	moveit_ros_planning
+)
+
+
+ament_target_dependencies(${PROJECT_NAME}_skills
+	${SKILL_DEPS}
+)
+
+install(TARGETS ${PROJECT_NAME}_skills
+        EXPORT ${PROJECT_NAME}SKILLS
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib)
