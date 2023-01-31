@@ -28,6 +28,7 @@ PickPlaceTask::PickPlaceTask(const rclcpp::Node::SharedPtr& node,
   : node_(node), pick_place_task_param_(parameters)
 {
   parameters_comp_path_skill.loadParameters(node_);
+  parameters_io_gripper_skill.loadParameters(node_);
 
   rm_loader_.reset(new robot_model_loader::RobotModelLoader(node_, "robot_description"));
   robot_model_ = rm_loader_->getModel();
@@ -42,6 +43,8 @@ void PickPlaceTask::initSkills()
   comp_path_skill = std::make_shared<robot_skills::ComputePathSkill>(
       node_, parameters_comp_path_skill, robot_model_, rm_loader_);
   exec_traj_skill = std::make_shared<robot_skills::ExecuteTrajectorySkill>(node_);
+  io_gripper_skill =
+      std::make_shared<robot_skills::IOGripperWithURSkill>(node_, parameters_io_gripper_skill);
   RCLCPP_INFO(LOGGER, "Initial skills");
 }
 
@@ -52,6 +55,10 @@ void PickPlaceTask::loadRobot()
 void PickPlaceTask::executeTask()
 {
   auto scene_diff_ = planning_scene_->diff();
+
+  /**************************
+   * Get Ready *
+   **************************/
 
   comp_path_skill->compute(planning_scene_, pick_place_task_param_.arm_group_name,
                            pick_place_task_param_.detect_state_name, robot_trajectory,
@@ -68,6 +75,9 @@ void PickPlaceTask::executeTask()
   /**************************
    * Open Hand *
    **************************/
+  RCLCPP_INFO(LOGGER, "Connect to %s, Open Hand",
+              parameters_io_gripper_skill.io_service_name.c_str());
+  io_gripper_skill->setGripperState("open");
 
   /**************************
    * Move To Object's Pose *

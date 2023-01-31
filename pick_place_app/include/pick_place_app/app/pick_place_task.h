@@ -5,6 +5,7 @@
 
 #include "pick_place_app/skills/compute_path_skill.h"
 #include "pick_place_app/skills/execute_trajectory_skill.h"
+#include "pick_place_app/skills/io_gripper_with_ur_skill.h"
 
 namespace robot_application
 {
@@ -35,6 +36,9 @@ protected:
   robot_skills::ComputePathSkill::Parameters parameters_comp_path_skill;
 
   robot_skills::ExecuteTrajectorySkill::SharedPtr exec_traj_skill;
+
+  robot_skills::IOGripperWithURSkill::SharedPtr io_gripper_skill;
+  robot_skills::IOGripperWithURSkill::Parameters parameters_io_gripper_skill;
 
   robot_trajectory::RobotTrajectoryPtr robot_trajectory;
   moveit_msgs::msg::RobotTrajectory trajectory_msg;
