@@ -66,14 +66,14 @@ int main(int argc, char** argv)
 
   robot_application::PickPlaceTask pick_place_task(node, pick_place_parameters);
 
-  moveit::planning_interface::PlanningSceneInterface psi;
+  // moveit::planning_interface::PlanningSceneInterface psi;
   // get pose from param
-  psi.applyCollisionObject(createObject(
-      pick_place_parameters.object_name, pick_place_parameters.object_frame_id,
-      tf2::toMsg(Eigen::Isometry3d(Eigen::Translation3d(
-          pick_place_parameters.object_pose.position.x, pick_place_parameters.object_pose.position.y,
-          pick_place_parameters.object_pose.position.z)))));
-  rclcpp::sleep_for(500ms);
+  // psi.applyCollisionObject(createObject(
+  //     pick_place_parameters.object_name, pick_place_parameters.object_frame_id,
+  //     tf2::toMsg(Eigen::Isometry3d(Eigen::Translation3d(
+  //         pick_place_parameters.object_pose.position.x, pick_place_parameters.object_pose.position.y,
+  //         pick_place_parameters.object_pose.position.z)))));
+  // rclcpp::sleep_for(500ms);
 
   pick_place_task.executeTask();
   //   if (!pick_place_task.plan())

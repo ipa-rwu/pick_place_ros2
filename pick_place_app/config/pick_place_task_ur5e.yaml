@@ -4,19 +4,29 @@ pick_place_demo:
     arm_group_name: "arm"
     hand_group_name: "hand"
     hand_frame: "tool0"
-    object_name: "object"
+    object_name: "object_box"
     end_effector_name: "hand"
     hand_open_pose: "open"
     hand_close_pose: "close"
     object_frame_id: "base_link"
     place_frame_id: "base_link"
-    gripper_io_server: "~/set_io"
-    place_pose: [-0.25, 0.6, 0.0, 1.0, 0.0, 0.0, 0.0]
-    object_pose: [0.25, 0.6, 0.05, 1.0, 0.0, 0.0, 0.0]
+    gripper_io_server: "set_io"
+    place_pose: [-0.25, 0.55, 0.0, 1.0, 0.0, 0.0, 0.0]
+    object_pose: [0.25, 0.70, 0.00851, 1.0, 0.0, 0.0, 0.0]
     detect_state_name: "detect"
     ik_frame: "tool0"
     planning_plugin: "ompl_interface/OMPLPlanner"
+    planner_id: "RRTstarkConfigDefault"
     show_trajectory: false
-    planning_timeout: 5.0
-    num_planning_attempts: 3
-    pick_offset: 0.02
+    planning_timeout: 10.0
+    num_planning_attempts: 10
+    pick_offset: 0.2
+    place_offset: 0.5
+    io_service_name: "/mock_io_server/set_io"
+    box_size: [0.017, 0.017, 0.017]
+    hand_group_name: "hand"
+    hand_frame: "shunk_egp50_base_link"
+    step_size: 0.005
+    lift_distance: 0.15
+    min_fraction: 0.60
+

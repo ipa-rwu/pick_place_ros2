@@ -6,6 +6,9 @@
 #include "pick_place_app/skills/compute_path_skill.h"
 #include "pick_place_app/skills/execute_trajectory_skill.h"
 #include "pick_place_app/skills/io_gripper_with_ur_skill.h"
+#include "pick_place_app/skills/modify_planning_scene_skill.h"
+
+#include <moveit/planning_scene_interface/planning_scene_interface.h>
 
 namespace robot_application
 {
@@ -22,6 +25,11 @@ public:
     std::string object_name;
     std::string detect_state_name;
     double pick_offset;
+    std::vector<double> box_size;
+    std::string hand_group_name;
+    std::string hand_frame;
+    double lift_distance;
+    double place_offset;
 
     void loadParameters(const rclcpp::Node::SharedPtr& node);
   };
@@ -40,6 +48,8 @@ protected:
   robot_skills::IOGripperWithURSkill::SharedPtr io_gripper_skill;
   robot_skills::IOGripperWithURSkill::Parameters parameters_io_gripper_skill;
 
+  robot_skills::ModifyPlanningSceneSkill::SharedPtr modify_planning_scene_skill;
+
   robot_trajectory::RobotTrajectoryPtr robot_trajectory;
   moveit_msgs::msg::RobotTrajectory trajectory_msg;
 
@@ -50,6 +60,7 @@ private:
   PickPlaceTask::Parameters pick_place_task_param_;
   robot_model_loader::RobotModelLoaderPtr rm_loader_;
   moveit::core::RobotStatePtr current_robot_state_;
+  moveit::planning_interface::PlanningSceneInterfacePtr psi_;
 };
 
 }  // namespace robot_application

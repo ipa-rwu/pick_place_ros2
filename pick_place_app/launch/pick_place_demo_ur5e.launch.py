@@ -7,13 +7,15 @@ from moveit_configs_utils import MoveItConfigsBuilder
 
 def generate_launch_description():
     moveit_config = MoveItConfigsBuilder(
-        "ur5_msa_fake", package_name="ur5_cell_moveit_config"
+        "ur5e_workcell", package_name="ur5e_cell_moveit_config"
     ).to_dict()
 
     pick_place_demo = Node(
         package="pick_place_app",
         executable="pick_place_task_demo",
         output="screen",
+        # prefix=["gdb -ex run --args"],
+        # prefix=["xterm -e gdb -ex run --args"],
         parameters=[
             os.path.join(
                 get_package_share_directory("pick_place_app"),
@@ -24,4 +26,10 @@ def generate_launch_description():
         ],
     )
 
-    return LaunchDescription([pick_place_demo])
+    mock_io_server = Node(
+        package="pick_place_app",
+        executable="mock_io_server",
+        output="screen",
+    )
+
+    return LaunchDescription([pick_place_demo, mock_io_server])
