@@ -60,6 +60,16 @@ install(TARGETS
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME})
 
+# ##########
+# # Mock IO Server ##
+# ##########
+add_executable(mock_io_server src/mock_io_server.cpp)
+ament_target_dependencies(mock_io_server
+rclcpp ur_msgs)
+install(TARGETS
+mock_io_server
+  DESTINATION lib/${PROJECT_NAME})
+
 install(DIRECTORY launch config
   DESTINATION share/${PROJECT_NAME}
 )
