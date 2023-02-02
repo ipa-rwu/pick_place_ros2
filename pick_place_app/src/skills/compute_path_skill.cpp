@@ -2,7 +2,7 @@
 #include "pick_place_app/skills/utils.h"
 
 #include <moveit/kinematic_constraints/utils.h>
-
+#include <geometry_msgs/msg/vector3.hpp>
 #include <rosparam_shortcuts/rosparam_shortcuts.h>
 #if __has_include(<tf2_eigen/tf2_eigen.hpp>)
 #include <tf2_eigen/tf2_eigen.hpp>
@@ -12,26 +12,27 @@
 
 namespace robot_skills
 {
-static const rclcpp::Logger LOGGER = rclcpp::get_logger("ComputePathSkill");
+static const rclcpp::Logger LOGGER = rclcpp::get_logger("compute_path_skill");
 
 void ComputePathSkill::Parameters::loadParameters(const rclcpp::Node::SharedPtr& node)
 {
   size_t errors = 0;
   errors += !rosparam_shortcuts::get(node, "ik_frame",
                                      ik_frame);  //
+
+  errors += !rosparam_shortcuts::get(node, "min_fraction", min_fraction);  //
   rosparam_shortcuts::shutdownIfError(errors);
 
   // Optional parameters (default value exists => no shutdown required if
   // loading fails)
   size_t warnings = 0;
-  warnings += !rosparam_shortcuts::get(node, "planning_plugin",
-                                       planning_plugin);  // e.g. ompl_interface/OMPLPlanner
   warnings += !rosparam_shortcuts::get(node, "planning_timeout",
                                        planning_timeout);  // e.g. 1000s
   warnings += !rosparam_shortcuts::get(node, "num_planning_attempts",
                                        num_planning_attempts);  // e.g. 3
 
-  RCLCPP_WARN(LOGGER, "Failed to load optional parameters.");
+  if (warnings > 0)
+    RCLCPP_WARN(LOGGER, "Failed to load optional parameters.");
 }
 
 ComputePathSkill::ComputePathSkill(rclcpp::Node::SharedPtr node,
@@ -55,24 +56,38 @@ ComputePathSkill::ComputePathSkill(rclcpp::Node::SharedPtr node,
                         and update the internal planning scene accordingly*/
   psm_->startStateMonitor();
 
+  /* Set up a PlanningPipeline, will use it generate plan */
   planning_pipeline_.reset(new planning_pipeline::PlanningPipeline(
       robot_model_, node_, "", "planning_plugin", "request_adapters"));
 }
 
 ComputePathSkill::~ComputePathSkill() = default;
 
+void ComputePathSkill::initMotionPlanRequest(moveit_msgs::msg::MotionPlanRequest& req,
+                                             const moveit::core::JointModelGroup* jmg,
+                                             double timeout)
+{
+  req.group_name = jmg->getName();
+  req.planner_id = parameters_.planner_id;
+  req.allowed_planning_time = timeout;
+  req.start_state.is_diff = true;  // we don't specify an extra start state
+  req.max_velocity_scaling_factor = parameters_.max_velocity_scaling_factor;
+  req.max_velocity_scaling_factor = parameters_.max_acceleration_scaling_factor;
+  req.num_planning_attempts = parameters_.num_planning_attempts;
+}
+
 bool ComputePathSkill::getJointStateGoal(const boost::any& goal,
                                          const moveit::core::JointModelGroup* jmg,
-                                         moveit::core::RobotState& state)
+                                         moveit::core::RobotState& target_state)
 {
   try
   {
     // try named joint pose
     const std::string& named_joint_pose = boost::any_cast<std::string>(goal);
-    if (!state.setToDefaultValues(jmg, named_joint_pose))
+    if (!target_state.setToDefaultValues(jmg, named_joint_pose))
       RCLCPP_ERROR(LOGGER, "Unknown joint pose: %s", named_joint_pose.c_str());
-    RCLCPP_INFO(LOGGER, "Get named_joint_pose: %s", named_joint_pose.c_str());
-    state.update();
+    RCLCPP_DEBUG(LOGGER, "Get named_joint_pose: %s", named_joint_pose.c_str());
+    target_state.update();
     return true;
   }
   catch (const boost::bad_any_cast&)
@@ -96,7 +111,7 @@ bool ComputePathSkill::getJointStateGoal(const boost::any& goal,
         RCLCPP_ERROR(LOGGER, "Joint '%s' is not part of group '%s'", name.c_str(),
                      jmg->getName().c_str());
 
-    moveit::core::robotStateMsgToRobotState(msg, state, false);
+    moveit::core::robotStateMsgToRobotState(msg, target_state, false);
     return true;
   }
   catch (const boost::bad_any_cast&)
@@ -105,6 +120,7 @@ bool ComputePathSkill::getJointStateGoal(const boost::any& goal,
 
   try
   {
+    // try joint map
     const std::map<std::string, double>& joint_map =
         boost::any_cast<std::map<std::string, double>>(goal);
     const auto& accepted = jmg->getJointModelNames();
@@ -113,9 +129,9 @@ bool ComputePathSkill::getJointStateGoal(const boost::any& goal,
       if (std::find(accepted.begin(), accepted.end(), joint.first) == accepted.end())
         RCLCPP_ERROR(LOGGER, "Joint '%s' is not part of group '%s'", joint.first.c_str(),
                      jmg->getName().c_str());
-      state.setVariablePosition(joint.first, joint.second);
+      target_state.setVariablePosition(joint.first, joint.second);
     }
-    state.update();
+    target_state.update();
     return true;
   }
   catch (const boost::bad_any_cast&)
@@ -134,8 +150,13 @@ bool ComputePathSkill::getPoseGoal(const boost::any& goal,
         boost::any_cast<geometry_msgs::msg::PoseStamped>(goal);
     tf2::fromMsg(msg.pose, target);
 
-    // transform target into global frame
+    // transform target into global(planning) frame
     target = scene->getFrameTransform(msg.header.frame_id) * target;
+    geometry_msgs::msg::Pose new_msg;
+    new_msg = tf2::toMsg(target);
+    RCLCPP_INFO(LOGGER, "Get pose goal: \n origin: %s \n transfer to planning frame %s: %s",
+                geometry_msgs::msg::to_yaml(msg).c_str(), scene->getPlanningFrame().c_str(),
+                geometry_msgs::msg::to_yaml(new_msg).c_str());
   }
   catch (const boost::bad_any_cast&)
   {
@@ -154,12 +175,15 @@ bool ComputePathSkill::getPointGoal(const boost::any& goal, const Eigen::Isometr
         boost::any_cast<geometry_msgs::msg::PointStamped>(goal);
     Eigen::Vector3d target_point;
     tf2::fromMsg(target.point, target_point);
-    // transform target into global frame
+    // transform target into global(planning) frame
     target_point = scene->getFrameTransform(target.header.frame_id) * target_point;
 
     // retain link orientation
     target_eigen = ik_pose;
     target_eigen.translation() = target_point;
+    RCLCPP_INFO(LOGGER, "Get point goal: \n origin: %s \n transfer to planning frame [%s]: %s",
+                geometry_msgs::msg::to_yaml(target).c_str(), scene->getPlanningFrame().c_str(),
+                geometry_msgs::msg::to_yaml(tf2::toMsg(target_eigen)).c_str());
   }
   catch (const boost::bad_any_cast&)
   {
@@ -168,19 +192,31 @@ bool ComputePathSkill::getPointGoal(const boost::any& goal, const Eigen::Isometr
   return true;
 }
 
-void ComputePathSkill::initMotionPlanRequest(moveit_msgs::msg::MotionPlanRequest& req,
-                                             const moveit::core::JointModelGroup* jmg,
-                                             double timeout)
+bool ComputePathSkill::plan(const planning_scene::PlanningSceneConstPtr& current_scene,
+                            const moveit::core::RobotState& target_robot_state,
+                            const moveit::core::JointModelGroup* jmg, double timeout,
+                            robot_trajectory::RobotTrajectoryPtr& result,
+                            const moveit_msgs::msg::Constraints& path_constraints)
 {
-  req.group_name = jmg->getName();
-  req.planner_id = parameters_.planning_plugin;
-  req.allowed_planning_time = timeout;
-  req.start_state.is_diff = true;  // we don't specify an extra start state
+  moveit_msgs::msg::MotionPlanRequest req;
+  initMotionPlanRequest(req, jmg, timeout);
 
-  req.num_planning_attempts = parameters_.num_planning_attempts;
+  planning_interface::MotionPlanResponse res;
+
+  req.goal_constraints.resize(1);
+  req.goal_constraints[0] = kinematic_constraints::constructGoalConstraints(
+      target_robot_state, jmg, parameters_.goal_joint_tolerance);
+  req.path_constraints = path_constraints;
+
+  bool success = planning_pipeline_->generatePlan(current_scene, req, res);
+  result = res.trajectory_;
+  time_parametrization_.computeTimeStamps(*result, parameters_.max_velocity_scaling_factor,
+                                          parameters_.max_acceleration_scaling_factor);
+  return success;
 }
 
-bool ComputePathSkill::plan(const moveit::core::LinkModel& link, const Eigen::Isometry3d& offset,
+bool ComputePathSkill::plan(const planning_scene::PlanningSceneConstPtr& current_scene,
+                            const moveit::core::LinkModel& link, const Eigen::Isometry3d& offset,
                             const Eigen::Isometry3d& target_eigen,
                             const moveit::core::JointModelGroup* jmg, double timeout,
                             robot_trajectory::RobotTrajectoryPtr& result,
@@ -189,10 +225,30 @@ bool ComputePathSkill::plan(const moveit::core::LinkModel& link, const Eigen::Is
   moveit_msgs::msg::MotionPlanRequest req;
   initMotionPlanRequest(req, jmg, timeout);
 
-  planning_scene_monitor::LockedPlanningSceneRO lscene(psm_);
   geometry_msgs::msg::PoseStamped target;
-  target.header.frame_id = lscene->getPlanningFrame();
-  target.pose = tf2::toMsg(target_eigen * offset.inverse());
+  target.header.frame_id = current_scene->getPlanningFrame();
+  //  Do we need offset?
+  // target.pose = tf2::toMsg(target_eigen * offset.inverse());
+  target.pose = tf2::toMsg(target_eigen);
+  RCLCPP_INFO(LOGGER, "Start Plan, goal:\n target: %s\n posestamp: %s", link.getName().c_str(),
+              geometry_msgs::msg::to_yaml(target).c_str());
+
+  auto new_jmg = jmg;
+  kinematics::KinematicsQueryOptions o;
+  o.return_approximate_solution = false;
+  auto target_robot_state = current_scene->getCurrentState();
+  if (target_robot_state.setFromIK(new_jmg, target.pose, link.getName(), 0.0))
+  {
+    sensor_msgs::msg::JointState current_joint_state;
+    moveit::core::robotStateToJointStateMsg(target_robot_state, current_joint_state);
+    RCLCPP_DEBUG(LOGGER, "Get IK, goal joint state: %s",
+                 sensor_msgs::msg::to_yaml(current_joint_state).c_str());
+  }
+  else
+  {
+    RCLCPP_ERROR(LOGGER, "Didn't Get IK");
+    // return false;
+  }
 
   req.goal_constraints.resize(1);
   req.goal_constraints[0] =
@@ -202,111 +258,177 @@ bool ComputePathSkill::plan(const moveit::core::LinkModel& link, const Eigen::Is
   req.path_constraints = path_constraints;
 
   planning_interface::MotionPlanResponse res;
-  bool success = planning_pipeline_->generatePlan(lscene, req, res);
-  result = res.trajectory_;
-  time_parametrization_.computeTimeStamps(*result, parameters_.max_velocity_scaling_factor,
-                                          parameters_.max_acceleration_scaling_factor);
-  return success;
-}
-
-bool ComputePathSkill::plan(const planning_scene::PlanningSceneConstPtr& target_scene,
-                            const moveit::core::JointModelGroup* jmg, double timeout,
-                            robot_trajectory::RobotTrajectoryPtr& result,
-                            const moveit_msgs::msg::Constraints& path_constraints)
-{
-  moveit_msgs::msg::MotionPlanRequest req;
-  initMotionPlanRequest(req, jmg, timeout);
-
-  planning_interface::MotionPlanResponse res;
   planning_scene_monitor::LockedPlanningSceneRO lscene(psm_);
-  req.goal_constraints.resize(1);
-  req.goal_constraints[0] = kinematic_constraints::constructGoalConstraints(
-      target_scene->getCurrentState(), jmg, parameters_.goal_joint_tolerance);
-  req.path_constraints = path_constraints;
-  /* Now, call the pipeline and check whether planning was successful. */
   bool success = planning_pipeline_->generatePlan(lscene, req, res);
-  result = res.trajectory_;
-  time_parametrization_.computeTimeStamps(*result, parameters_.max_velocity_scaling_factor,
-                                          parameters_.max_acceleration_scaling_factor);
+  if (success)
+  {
+    result = res.trajectory_;
+    time_parametrization_.computeTimeStamps(*result, parameters_.max_velocity_scaling_factor,
+                                            parameters_.max_acceleration_scaling_factor);
+  }
   return success;
 }
 
 bool ComputePathSkill::planCartesian(const std::string& group,
+                                     const std::vector<geometry_msgs::msg::Pose>& waypoints,
                                      const moveit::core::RobotState& current_robot_state,
-                                     const std::string& plan_frame_id,
-                                     const moveit::core::LinkModel& link,
-                                     const Eigen::Isometry3d& offset,
-                                     const Eigen::Isometry3d& target_eigen,
                                      robot_trajectory::RobotTrajectoryPtr& result)
 {
-  move_group.reset();
-  move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, group);
-
-  geometry_msgs::msg::Pose end_pose =
-      tf2::toMsg(current_robot_state.getGlobalLinkTransform(&link) * offset.inverse());
-  RCLCPP_DEBUG(LOGGER, "end pose: %s", geometry_msgs::msg::to_yaml(end_pose).c_str());
-
-  geometry_msgs::msg::PoseStamped target;
-  target.header.frame_id = plan_frame_id;
-  target.pose = tf2::toMsg(target_eigen * offset.inverse());
-  RCLCPP_DEBUG(LOGGER, "target pose: %s", geometry_msgs::msg::to_yaml(target.pose).c_str());
-
-  std::vector<geometry_msgs::msg::Pose> waypoints;
-  waypoints.push_back(end_pose);
-  geometry_msgs::msg::Pose temp_pose = end_pose;
-  temp_pose.position.x = target.pose.position.x;
-  waypoints.push_back(temp_pose);
-  temp_pose.position.y = target.pose.position.y;
-  waypoints.push_back(temp_pose);
-  temp_pose.position.z = target.pose.position.z;
-  waypoints.push_back(temp_pose);
-
-  // plan to Cartesian target
+  move_group_.reset();
+  move_group_ = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, group);
 
   double max_fraction = 0;
   double current_fraction = 0;
   auto robot_trajectory_msg = moveit_msgs::msg::RobotTrajectory();
 
   int try_plan = 0;
+  bool success;
+
   while (try_plan < parameters_.num_planning_attempts)
   {
     try_plan++;
     moveit_msgs::msg::RobotTrajectory tmp_robot_trajectory;
-    current_fraction = move_group->computeCartesianPath(
+    current_fraction = move_group_->computeCartesianPath(
         waypoints, parameters_.step_size, parameters_.jump_threshold, tmp_robot_trajectory);
     if (current_fraction > max_fraction)
     {
       max_fraction = current_fraction;
       robot_trajectory_msg = tmp_robot_trajectory;
     }
-    RCLCPP_INFO(LOGGER, "(%.2f%% achieved)", current_fraction * 100.00);
-  }
-  bool success = false;
-  if (max_fraction < 0.5)
-  {
-    return success;
   }
   result->setRobotTrajectoryMsg(current_robot_state, robot_trajectory_msg);
 
-  time_parametrization_.computeTimeStamps(*result, parameters_.max_velocity_scaling_factor,
-                                          parameters_.max_acceleration_scaling_factor);
+  if (max_fraction < parameters_.min_fraction)
+  {
+    success = false;
+    RCLCPP_ERROR(LOGGER,
+                 "Plan Cartesian path faild: (%.2f%% achieved), lower than allowed fraction: %.2f",
+                 max_fraction * 100.00, parameters_.min_fraction * 100.00);
+    return success;
+  }
 
   success = true;
+  RCLCPP_INFO(LOGGER, "Plan Cartesian path succeed!: (%.2f%% achieved)", max_fraction * 100.00);
+
   return success;
 }
 
-bool ComputePathSkill::compute(planning_scene::PlanningScenePtr& scene, const std::string& group,
-                               const boost::any& goal,
-                               robot_trajectory::RobotTrajectoryPtr& robot_trajectory,
-                               const moveit_msgs::msg::Constraints& path_constraints,
-                               bool compute_cartesian_path)
+bool ComputePathSkill::planRelativeCartesian(moveit::core::RobotState& current_robot_state,
+                                             const std::string& group,
+                                             const moveit::core::LinkModel& link,
+                                             geometry_msgs::msg::Vector3 direction,
+                                             robot_trajectory::RobotTrajectoryPtr& robot_trajectory)
 {
-  auto scene_current = scene->diff();
-  auto scene_diff = scene->diff();
-  const moveit::core::RobotModelConstPtr& robot_model = scene_diff->getRobotModel();
+  // transfer robot state to a pose of link in global(planning) frame
+  geometry_msgs::msg::Pose end_pose = tf2::toMsg(current_robot_state.getGlobalLinkTransform(&link));
+  RCLCPP_INFO(LOGGER, "Current pose of %s: %s", link.getName().c_str(),
+              geometry_msgs::msg::to_yaml(end_pose).c_str());
 
-  double timeout = parameters_.planning_timeout;
+  std::vector<geometry_msgs::msg::Pose> waypoints;
+  waypoints.push_back(end_pose);
+
+  if (abs(direction.x) > 0)
+  {
+    end_pose.position.x = end_pose.position.x + direction.x;
+    waypoints.push_back(end_pose);
+  }
+  if (abs(direction.y) > 0)
+  {
+    end_pose.position.y = end_pose.position.y + direction.y;
+    waypoints.push_back(end_pose);
+  }
+  if (abs(direction.z) > 0)
+  {
+    end_pose.position.z = end_pose.position.z + direction.z;
+    waypoints.push_back(end_pose);
+  }
+  for (const auto waypoint : waypoints)
+  {
+    RCLCPP_INFO(LOGGER, "RelativeCartesian waypoins: %s",
+                geometry_msgs::msg::to_yaml(waypoint).c_str());
+  }
+
+  // plan to Cartesian target
+  bool success;
+  success = planCartesian(group, waypoints, current_robot_state, robot_trajectory);
+  return success;
+}
+
+bool ComputePathSkill::computeRelative(const std::string& group,
+                                       geometry_msgs::msg::Vector3 direction,
+                                       robot_trajectory::RobotTrajectoryPtr& robot_trajectory)
+{
+  planning_scene_monitor::LockedPlanningSceneRO lscene(psm_);
+  const moveit::core::RobotModelConstPtr& robot_model = lscene->getRobotModel();
   const moveit::core::JointModelGroup* jmg = robot_model->getJointModelGroup(group);
+  moveit::core::RobotState current_robot_state = lscene->getCurrentState();
+  moveit::core::RobotState target_robot_state = current_robot_state;
+  double timeout = parameters_.planning_timeout;
+  bool success;
+
+  if (!jmg)
+  {
+    RCLCPP_ERROR(LOGGER, "Could not joint group from %s", group.c_str());
+    return false;
+  }
+
+  geometry_msgs::msg::PoseStamped ik_pose_msg;
+  // tip link
+  const moveit::core::LinkModel* link;
+  // the translation vector from link to global(planning) frame
+  Eigen::Isometry3d ik_pose_world;
+  if (!utils::getRobotTipForFrame(ik_pose_msg, lscene, jmg, link, ik_pose_world))
+    return false;
+
+  success = planRelativeCartesian(current_robot_state, group, *link, direction, robot_trajectory);
+  return success;
+}
+
+bool ComputePathSkill::planCartesianToPose(const std::string& group,
+                                           const moveit::core::RobotState& current_robot_state,
+                                           const std::string& plan_frame_id,
+                                           const moveit::core::LinkModel& link,
+                                           const Eigen::Isometry3d& offset,
+                                           const Eigen::Isometry3d& target_eigen,
+                                           robot_trajectory::RobotTrajectoryPtr& result)
+{
+  // transfer robot state to a pose of link in global(planning) frame
+  geometry_msgs::msg::Pose end_pose = tf2::toMsg(current_robot_state.getGlobalLinkTransform(&link));
+  RCLCPP_INFO(LOGGER, "Current pose of %s: %s", link.getName().c_str(),
+              geometry_msgs::msg::to_yaml(end_pose).c_str());
+
+  // geometry_msgs::msg::PoseStamped target;
+  // target.header.frame_id = plan_frame_id;
+  // target.pose = tf2::toMsg(target_eigen * offset.inverse());
+  geometry_msgs::msg::Pose target;
+  target = tf2::toMsg(target_eigen * offset.inverse());
+
+  RCLCPP_INFO(LOGGER, "target pose: %s", geometry_msgs::msg::to_yaml(target).c_str());
+
+  std::vector<geometry_msgs::msg::Pose> waypoints;
+  waypoints.push_back(end_pose);
+  waypoints.push_back(target);
+
+  // plan to Cartesian target
+  bool success;
+  success = planCartesian(group, waypoints, current_robot_state, result);
+  return success;
+}
+
+bool ComputePathSkill::computePath(planning_scene::PlanningScenePtr& scene,
+                                   const std::string& group, const boost::any& goal,
+                                   robot_trajectory::RobotTrajectoryPtr& robot_trajectory,
+                                   bool compute_cartesian_path,
+                                   const moveit_msgs::msg::Constraints& path_constraints)
+{
+  planning_scene_monitor::LockedPlanningSceneRO lscene(psm_);
+  const moveit::core::RobotModelConstPtr& robot_model = lscene->getRobotModel();
+  const moveit::core::JointModelGroup* jmg = robot_model->getJointModelGroup(group);
+  moveit::core::RobotState current_robot_state = lscene->getCurrentState();
+  moveit::core::RobotState target_robot_state = current_robot_state;
+  double timeout = parameters_.planning_timeout;
+  bool success;
+
   if (!jmg)
   {
     RCLCPP_ERROR(LOGGER, "Could not joint group from %s", group.c_str());
@@ -318,20 +440,24 @@ bool ComputePathSkill::compute(planning_scene::PlanningScenePtr& scene, const st
     return false;
   }
 
-  bool success = false;
-
-  if (getJointStateGoal(goal, jmg, scene_diff->getCurrentStateNonConst()))
+  if (getJointStateGoal(goal, jmg, target_robot_state))
   {
-    success = plan(scene_diff, jmg, timeout, robot_trajectory, path_constraints);
+    RCLCPP_INFO(LOGGER, "get a joint state goal");
+    success = plan(lscene, target_robot_state, jmg, timeout, robot_trajectory, path_constraints);
   }
   else
   {
+    planning_scene_monitor::LockedPlanningSceneRO lscene(psm_);
+    auto current_robot_state = lscene->getCurrentState();
+
     Eigen::Isometry3d target;
     geometry_msgs::msg::PoseStamped ik_pose_msg;
 
+    // tip link
     const moveit::core::LinkModel* link;
+    // the translation vector from link to global(planning) frame
     Eigen::Isometry3d ik_pose_world;
-    if (!utils::getRobotTipForFrame(parameters_.ik_frame, *scene, jmg, link, ik_pose_world))
+    if (!utils::getRobotTipForFrame(ik_pose_msg, lscene, jmg, link, ik_pose_world))
       return false;
 
     if (!getPoseGoal(goal, scene, target) && !getPointGoal(goal, ik_pose_world, scene, target))
@@ -343,21 +469,28 @@ bool ComputePathSkill::compute(planning_scene::PlanningScenePtr& scene, const st
     // offset from link to ik_frame
     Eigen::Isometry3d offset =
         scene->getCurrentState().getGlobalLinkTransform(link).inverse() * ik_pose_world;
-
-    planning_scene_monitor::LockedPlanningSceneRO lscene(psm_);
-    auto current_robot_state = lscene->getCurrentState();
+    RCLCPP_DEBUG(LOGGER, "offset: %s", geometry_msgs::msg::to_yaml(tf2::toMsg(offset)).c_str());
 
     if (!compute_cartesian_path)
     {
-      success = plan(*link, offset, target, jmg, timeout, robot_trajectory, path_constraints);
+      geometry_msgs::msg::Pose end_pose =
+          tf2::toMsg(current_robot_state.getGlobalLinkTransform(link));
+      RCLCPP_INFO(LOGGER, "Current pose of %s: %s", link->getName().c_str(),
+                  geometry_msgs::msg::to_yaml(end_pose).c_str());
+      success =
+          plan(lscene, *link, offset, target, jmg, timeout, robot_trajectory, path_constraints);
     }
     else
     {
       moveit_msgs::msg::RobotTrajectory robot_traj_msg;
-      success = planCartesian(group, lscene->getCurrentState(), lscene->getPlanningFrame(), *link,
-                              offset, target, robot_trajectory);
+      success = planCartesianToPose(group, current_robot_state, lscene->getPlanningFrame(), *link,
+                                    offset, target, robot_trajectory);
     }
   }
+
+  time_parametrization_.computeTimeStamps(*robot_trajectory,
+                                          parameters_.max_velocity_scaling_factor,
+                                          parameters_.max_acceleration_scaling_factor);
 
   if (success)
   {
