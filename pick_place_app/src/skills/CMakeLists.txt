@@ -3,11 +3,13 @@ add_library(${PROJECT_NAME}_skills SHARED
 	${PROJECT_INCLUDE}/skills/utils.h
 	${PROJECT_INCLUDE}/skills/execute_trajectory_skill.h
 	${PROJECT_INCLUDE}/skills/io_gripper_with_ur_skill.h
+	${PROJECT_INCLUDE}/skills/modify_planning_scene_skill.h
 
 	compute_path_skill.cpp
 	utils.cpp
 	execute_trajectory_skill.cpp
 	io_gripper_with_ur_skill.cpp
+	modify_planning_scene_skill.cpp
 )
 
 set(SKILL_DEPS
