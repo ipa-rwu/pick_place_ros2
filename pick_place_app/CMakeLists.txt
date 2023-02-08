@@ -21,6 +21,7 @@ find_package(moveit_ros_planning_interface REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(Boost REQUIRED)
+find_package(yaml_cpp_vendor REQUIRED)
 
 set(PROJECT_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/include/pick_place_app)
 

@@ -1,4 +1,5 @@
 #include "pick_place_app/app/pick_place_task.h"
+#include "pick_place_app/skills/utils.h"
 
 #include <rosparam_shortcuts/rosparam_shortcuts.h>
 #include <tf2_eigen/tf2_eigen.h>
@@ -24,6 +25,7 @@ void PickPlaceTask::Parameters::loadParameters(const rclcpp::Node::SharedPtr& no
   errors += !rosparam_shortcuts::get(node, "box_size", box_size);
   errors += !rosparam_shortcuts::get(node, "hand_group_name", hand_group_name);
   errors += !rosparam_shortcuts::get(node, "hand_frame", hand_frame);
+  errors += !rosparam_shortcuts::get(node, "path_constraints_file", path_constraints_file);
 
   rosparam_shortcuts::shutdownIfError(errors);
 }
@@ -134,13 +136,10 @@ void PickPlaceTask::executeTask()
 
     robot_trajectory->clear();
     moveit_msgs::msg::Constraints path_constraints;
-    // moveit_msgs::msg::JointConstraint joint_constraint;
-    // joint_constraint.joint_name = "elbow_joint";
-    // joint_constraint.position = -1.5707;
-    // joint_constraint.tolerance_above = 0.7854;
-    // joint_constraint.tolerance_below = 0.5235;
-    // joint_constraint.weight = 0.9;
-    // path_constraints.joint_constraints.push_back(joint_constraint);
+    robot_skills::utils::loadPathConstraintsFromYaml(pick_place_task_param_.path_constraints_file,
+                                                     path_constraints);
+    RCLCPP_INFO(LOGGER, "Planning with path_constraints: %s",
+                moveit_msgs::msg::to_yaml(path_constraints).c_str());
 
     step_success =
         comp_path_skill->computePath(planning_scene_, pick_place_task_param_.arm_group_name,

@@ -1,4 +1,5 @@
 #include "pick_place_app/skills/utils.h"
+#include "ament_index_cpp/get_package_share_directory.hpp"
 
 namespace robot_skills
 {
@@ -69,5 +70,59 @@ bool getRobotTipForFrame(const geometry_msgs::msg::PoseStamped ik_frame,
 
   return true;
 }
+
+template <typename T>
+T getValueFromYaml(const YAML::Node& node, const std::string& key)
+{
+  try
+  {
+    return node[key].as<T>();
+  }
+  catch (YAML::Exception& e)
+  {
+    std::stringstream ss;
+    ss << "Failed to parse YAML tag '" << key << "' for reason: " << e.msg;
+    throw YAML::Exception(e.mark, ss.str());
+  }
+}
+
+void loadPathConstraintsFromYaml(const std::string path_constraints_yaml,
+                                 moveit_msgs::msg::Constraints& path_constraints)
+{
+  std::string params_file = ament_index_cpp::get_package_share_directory(CURRENT_PKG) + "/config/" +
+                            path_constraints_yaml;
+  YAML::Node config = YAML::LoadFile(params_file);
+  auto doc = config["path_constraints"];
+  auto path_constraint_name = utils::getValueFromYaml<std::string>(doc, "name");
+
+  if (path_constraint_name.empty())
+  {
+    std::stringstream ss;
+    ss << "The name tag was empty in '" << path_constraints_yaml << "' file ";
+    throw YAML::Exception(doc["name"].Mark(), ss.str());
+  }
+  path_constraints.name = path_constraint_name;
+  try
+  {
+    for (const auto joint_doc : doc["joint_constraints"])
+    {
+      moveit_msgs::msg::JointConstraint joint_constraint;
+      joint_constraint.joint_name = utils::getValueFromYaml<std::string>(joint_doc, "joint_name");
+      joint_constraint.tolerance_above =
+          utils::getValueFromYaml<double>(joint_doc, "tolerance_above");
+      joint_constraint.tolerance_below =
+          utils::getValueFromYaml<double>(joint_doc, "tolerance_below");
+      joint_constraint.weight = utils::getValueFromYaml<double>(joint_doc, "weight");
+
+      path_constraints.joint_constraints.push_back(joint_constraint);
+    }
+  }
+  catch (YAML::Exception& e)
+  {
+    RCLCPP_WARN(LOGGER, "joint_constraints aren't defined in %s", path_constraints_yaml.c_str());
+  }
+  // RWU TODO: parser PositionConstraint OrientationConstraint  VisibilityConstraint
+}
+
 }  // namespace utils
 }  // namespace robot_skills
