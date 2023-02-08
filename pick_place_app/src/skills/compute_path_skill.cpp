@@ -21,6 +21,12 @@ void ComputePathSkill::Parameters::loadParameters(const rclcpp::Node::SharedPtr&
                                      ik_frame);  //
 
   errors += !rosparam_shortcuts::get(node, "min_fraction", min_fraction);  //
+  errors += !rosparam_shortcuts::get(node, "max_acceleration_scaling_factor",
+                                     max_acceleration_scaling_factor);  //
+
+  errors += !rosparam_shortcuts::get(node, "max_velocity_scaling_factor",
+                                     max_velocity_scaling_factor);  //
+
   rosparam_shortcuts::shutdownIfError(errors);
 
   // Optional parameters (default value exists => no shutdown required if
