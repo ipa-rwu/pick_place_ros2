@@ -16,6 +16,7 @@ find_package(pluginlib REQUIRED)
 find_package(moveit_core REQUIRED)
 find_package(moveit_ros_planning REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
+find_package(aruco_msgs REQUIRED)
 
 # System dependencies are found with CMake's conventions
 find_package(eigen3_cmake_module REQUIRED)
@@ -55,8 +56,21 @@ target_include_directories(${pick_place_task}
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 
+set(point_to_point_task point_to_point_demo)
+add_executable(${point_to_point_task} src/main_point_to_point.cpp)
+target_compile_options(${point_to_point_task} PUBLIC -g -O0)
+target_link_libraries(${point_to_point_task}
+  ${PROJECT_NAME}_app
+)
+
+target_include_directories(${point_to_point_task}
+  PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+
 install(TARGETS
   ${pick_place_task}
+  ${point_to_point_task}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME})

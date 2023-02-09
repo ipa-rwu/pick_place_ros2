@@ -1,7 +1,10 @@
 add_library(${PROJECT_NAME}_app SHARED
 	${PROJECT_INCLUDE}/app/pick_place_task.h
+	${PROJECT_INCLUDE}/app/point_to_point.h
+
 
 	pick_place_task.cpp
+	point_to_point.cpp
 )
 
 set(APP_DEPS

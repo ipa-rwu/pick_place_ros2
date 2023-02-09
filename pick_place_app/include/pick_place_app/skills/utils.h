@@ -32,6 +32,8 @@ T getValueFromYaml(const YAML::Node& node, const std::string& key);
 void loadPathConstraintsFromYaml(const std::string path_constraints_yaml,
                                  moveit_msgs::msg::Constraints& path_constraints);
 
+void loadPointsFromYaml(const std::string path_constraints_yaml,
+                        geometry_msgs::msg::PoseArray& pose_array);
 }  // namespace utils
 
 }  // namespace robot_skills

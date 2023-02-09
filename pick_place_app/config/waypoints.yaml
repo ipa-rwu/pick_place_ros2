@@ -1,0 +1,11 @@
+waypoints:
+  frame_id: base_link
+  poses:
+    - position:
+        x: 0.25
+        y: 0.70
+        z: 0.3
+    - position:
+        x: -0.15
+        y: 0.55
+        z: 0.3

@@ -123,5 +123,49 @@ void loadPathConstraintsFromYaml(const std::string path_constraints_yaml,
   // RWU TODO: parser PositionConstraint OrientationConstraint  VisibilityConstraint
 }
 
+void loadPointsFromYaml(const std::string waypoints_file, geometry_msgs::msg::PoseArray& pose_array)
+{
+  std::string params_file =
+      ament_index_cpp::get_package_share_directory(CURRENT_PKG) + "/config/" + waypoints_file;
+  YAML::Node config = YAML::LoadFile(params_file);
+  auto doc = config["waypoints"];
+  auto doc_poses = doc["poses"];
+  try
+  {
+    auto frame_id = utils::getValueFromYaml<std::string>(doc, "frame_id");
+    if (frame_id.empty())
+    {
+      std::stringstream ss;
+      ss << "The frame_id tag was empty in '" << waypoints_file << "' file ";
+      throw YAML::Exception(doc["frame_id"].Mark(), ss.str());
+    }
+    else
+    {
+      pose_array.header.frame_id = frame_id;
+    }
+  }
+  catch (YAML::Exception& e)
+  {
+    RCLCPP_WARN(LOGGER, "frame_id aren't defined in %s", waypoints_file.c_str());
+  }
+
+  try
+  {
+    for (const auto doc_pose : doc_poses)
+    {
+      geometry_msgs::msg::Pose tmp;
+      tmp.position.x = utils::getValueFromYaml<double>(doc_pose["position"], "x");
+      tmp.position.y = utils::getValueFromYaml<double>(doc_pose["position"], "y");
+      tmp.position.z = utils::getValueFromYaml<double>(doc_pose["position"], "z");
+
+      pose_array.poses.push_back(tmp);
+    }
+  }
+  catch (YAML::Exception& e)
+  {
+    RCLCPP_WARN(LOGGER, "pose x,y,z aren't defined in %s", waypoints_file.c_str());
+  }
+}
+
 }  // namespace utils
 }  // namespace robot_skills
