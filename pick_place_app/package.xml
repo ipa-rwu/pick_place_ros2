@@ -19,9 +19,11 @@
   <depend>pick_place_msgs</depend>
   <depend>ur_msgs</depend>
   <depend>yaml_cpp_vendor</depend>
+  <depend>aruco_msgs</depend>
 
   <exec_depend>controller_manager</exec_depend>
   <exec_depend>rclcpp_components</exec_depend>
+  <exec_depend>aruco_ros</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_cmake_clang_format</test_depend>

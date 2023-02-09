@@ -4,12 +4,14 @@ add_library(${PROJECT_NAME}_skills SHARED
 	${PROJECT_INCLUDE}/skills/execute_trajectory_skill.h
 	${PROJECT_INCLUDE}/skills/io_gripper_with_ur_skill.h
 	${PROJECT_INCLUDE}/skills/modify_planning_scene_skill.h
+	${PROJECT_INCLUDE}/skills/detect_aruco_marker_skill.h
 
 	compute_path_skill.cpp
 	utils.cpp
 	execute_trajectory_skill.cpp
 	io_gripper_with_ur_skill.cpp
 	modify_planning_scene_skill.cpp
+	detect_aruco_marker_skill.cpp
 )
 
 set(SKILL_DEPS
@@ -22,8 +24,9 @@ set(SKILL_DEPS
 	moveit_ros_planning_interface
 	moveit_ros_planning
 	ur_msgs
+	aruco_msgs
+	yaml_cpp_vendor
 )
-
 
 ament_target_dependencies(${PROJECT_NAME}_skills
 	${SKILL_DEPS}
