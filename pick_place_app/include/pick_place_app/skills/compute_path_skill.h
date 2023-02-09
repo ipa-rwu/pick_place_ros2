@@ -105,8 +105,8 @@ public:
 
   bool planCartesianToPose(const std::string& group,
                            const moveit::core::RobotState& current_robot_state,
-                           const std::string& plan_frame_id, const moveit::core::LinkModel& link,
-                           const Eigen::Isometry3d& offset, const Eigen::Isometry3d& target_eigen,
+                           const moveit::core::LinkModel& link, const Eigen::Isometry3d& offset,
+                           const Eigen::Isometry3d& target_eigen,
                            robot_trajectory::RobotTrajectoryPtr& result);
 
   /**
@@ -125,8 +125,9 @@ public:
                      robot_trajectory::RobotTrajectoryPtr& result);
 
   bool computePath(
-      planning_scene::PlanningScenePtr& scene, const std::string& group, const boost::any& goal,
-      robot_trajectory::RobotTrajectoryPtr& robot_trajectory, bool compute_cartesian_path = false,
+      const std::string& group, const boost::any& goal,
+      robot_trajectory::RobotTrajectoryPtr& robot_trajectory, const std::string& ik_frame_id = "",
+      bool compute_cartesian_path = false,
       const moveit_msgs::msg::Constraints& path_constraints = moveit_msgs::msg::Constraints());
 
   bool planRelativeCartesian(moveit::core::RobotState& current_robot_state,
@@ -135,7 +136,8 @@ public:
                              robot_trajectory::RobotTrajectoryPtr& robot_trajectory);
 
   bool computeRelative(const std::string& group, geometry_msgs::msg::Vector3 direction,
-                       robot_trajectory::RobotTrajectoryPtr& robot_trajectory);
+                       robot_trajectory::RobotTrajectoryPtr& robot_trajectory,
+                       const std::string& ik_frame_id = "");
 
   planning_pipeline::PlanningPipelinePtr planning_pipeline_;
 
@@ -171,7 +173,7 @@ protected:
    * @return true
    * @return false
    */
-  bool getPoseGoal(const boost::any& goal, const planning_scene::PlanningScenePtr& scene,
+  bool getPoseGoal(const boost::any& goal, const planning_scene::PlanningSceneConstPtr& scene,
                    Eigen::Isometry3d& target);
 
   /**
@@ -185,7 +187,8 @@ protected:
    * @return false
    */
   bool getPointGoal(const boost::any& goal, const Eigen::Isometry3d& ik_pose,
-                    const planning_scene::PlanningScenePtr& scene, Eigen::Isometry3d& target_eigen);
+                    const planning_scene::PlanningSceneConstPtr& scene,
+                    Eigen::Isometry3d& target_eigen);
 
 protected:
 private:

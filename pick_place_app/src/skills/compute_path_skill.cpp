@@ -74,6 +74,7 @@ void ComputePathSkill::initMotionPlanRequest(moveit_msgs::msg::MotionPlanRequest
                                              double timeout)
 {
   req.group_name = jmg->getName();
+  req.pipeline_id = parameters_.planning_plugin;
   req.planner_id = parameters_.planner_id;
   req.allowed_planning_time = timeout;
   req.start_state.is_diff = true;  // we don't specify an extra start state
@@ -147,7 +148,7 @@ bool ComputePathSkill::getJointStateGoal(const boost::any& goal,
 }
 
 bool ComputePathSkill::getPoseGoal(const boost::any& goal,
-                                   const planning_scene::PlanningScenePtr& scene,
+                                   const planning_scene::PlanningSceneConstPtr& scene,
                                    Eigen::Isometry3d& target)
 {
   try
@@ -172,7 +173,7 @@ bool ComputePathSkill::getPoseGoal(const boost::any& goal,
 }
 
 bool ComputePathSkill::getPointGoal(const boost::any& goal, const Eigen::Isometry3d& ik_pose,
-                                    const planning_scene::PlanningScenePtr& scene,
+                                    const planning_scene::PlanningSceneConstPtr& scene,
                                     Eigen::Isometry3d& target_eigen)
 {
   try
@@ -233,9 +234,7 @@ bool ComputePathSkill::plan(const planning_scene::PlanningSceneConstPtr& current
 
   geometry_msgs::msg::PoseStamped target;
   target.header.frame_id = current_scene->getPlanningFrame();
-  //  Do we need offset?
-  // target.pose = tf2::toMsg(target_eigen * offset.inverse());
-  target.pose = tf2::toMsg(target_eigen);
+  target.pose = tf2::toMsg(target_eigen * offset.inverse());
   RCLCPP_INFO(LOGGER, "Start Plan, goal:\n target: %s\n posestamp: %s", link.getName().c_str(),
               geometry_msgs::msg::to_yaml(target).c_str());
 
@@ -362,7 +361,8 @@ bool ComputePathSkill::planRelativeCartesian(moveit::core::RobotState& current_r
 
 bool ComputePathSkill::computeRelative(const std::string& group,
                                        geometry_msgs::msg::Vector3 direction,
-                                       robot_trajectory::RobotTrajectoryPtr& robot_trajectory)
+                                       robot_trajectory::RobotTrajectoryPtr& robot_trajectory,
+                                       const std::string& ik_frame_id)
 {
   planning_scene_monitor::LockedPlanningSceneRO lscene(psm_);
   const moveit::core::RobotModelConstPtr& robot_model = lscene->getRobotModel();
@@ -378,12 +378,10 @@ bool ComputePathSkill::computeRelative(const std::string& group,
     return false;
   }
 
-  geometry_msgs::msg::PoseStamped ik_pose_msg;
-  // tip link
   const moveit::core::LinkModel* link;
   // the translation vector from link to global(planning) frame
   Eigen::Isometry3d ik_pose_world;
-  if (!utils::getRobotTipForFrame(ik_pose_msg, lscene, jmg, link, ik_pose_world))
+  if (!utils::getRobotTipForFrame(lscene, jmg, link, ik_pose_world, ik_frame_id))
     return false;
 
   success = planRelativeCartesian(current_robot_state, group, *link, direction, robot_trajectory);
@@ -392,7 +390,6 @@ bool ComputePathSkill::computeRelative(const std::string& group,
 
 bool ComputePathSkill::planCartesianToPose(const std::string& group,
                                            const moveit::core::RobotState& current_robot_state,
-                                           const std::string& plan_frame_id,
                                            const moveit::core::LinkModel& link,
                                            const Eigen::Isometry3d& offset,
                                            const Eigen::Isometry3d& target_eigen,
@@ -403,9 +400,6 @@ bool ComputePathSkill::planCartesianToPose(const std::string& group,
   RCLCPP_INFO(LOGGER, "Current pose of %s: %s", link.getName().c_str(),
               geometry_msgs::msg::to_yaml(end_pose).c_str());
 
-  // geometry_msgs::msg::PoseStamped target;
-  // target.header.frame_id = plan_frame_id;
-  // target.pose = tf2::toMsg(target_eigen * offset.inverse());
   geometry_msgs::msg::Pose target;
   target = tf2::toMsg(target_eigen * offset.inverse());
 
@@ -421,10 +415,9 @@ bool ComputePathSkill::planCartesianToPose(const std::string& group,
   return success;
 }
 
-bool ComputePathSkill::computePath(planning_scene::PlanningScenePtr& scene,
-                                   const std::string& group, const boost::any& goal,
+bool ComputePathSkill::computePath(const std::string& group, const boost::any& goal,
                                    robot_trajectory::RobotTrajectoryPtr& robot_trajectory,
-                                   bool compute_cartesian_path,
+                                   const std::string& ik_frame_id, bool compute_cartesian_path,
                                    const moveit_msgs::msg::Constraints& path_constraints)
 {
   planning_scene_monitor::LockedPlanningSceneRO lscene(psm_);
@@ -457,16 +450,15 @@ bool ComputePathSkill::computePath(planning_scene::PlanningScenePtr& scene,
     auto current_robot_state = lscene->getCurrentState();
 
     Eigen::Isometry3d target;
-    geometry_msgs::msg::PoseStamped ik_pose_msg;
 
     // tip link
     const moveit::core::LinkModel* link;
     // the translation vector from link to global(planning) frame
     Eigen::Isometry3d ik_pose_world;
-    if (!utils::getRobotTipForFrame(ik_pose_msg, lscene, jmg, link, ik_pose_world))
+    if (!utils::getRobotTipForFrame(lscene, jmg, link, ik_pose_world, ik_frame_id))
       return false;
 
-    if (!getPoseGoal(goal, scene, target) && !getPointGoal(goal, ik_pose_world, scene, target))
+    if (!getPoseGoal(goal, lscene, target) && !getPointGoal(goal, ik_pose_world, lscene, target))
     {
       RCLCPP_ERROR(LOGGER, "Invalid goal type: %s", goal.type().name());
       return false;
@@ -474,8 +466,7 @@ bool ComputePathSkill::computePath(planning_scene::PlanningScenePtr& scene,
 
     // offset from link to ik_frame
     Eigen::Isometry3d offset =
-        scene->getCurrentState().getGlobalLinkTransform(link).inverse() * ik_pose_world;
-    RCLCPP_DEBUG(LOGGER, "offset: %s", geometry_msgs::msg::to_yaml(tf2::toMsg(offset)).c_str());
+        lscene->getCurrentState().getGlobalLinkTransform(link).inverse() * ik_pose_world;
 
     if (!compute_cartesian_path)
     {
@@ -489,8 +480,8 @@ bool ComputePathSkill::computePath(planning_scene::PlanningScenePtr& scene,
     else
     {
       moveit_msgs::msg::RobotTrajectory robot_traj_msg;
-      success = planCartesianToPose(group, current_robot_state, lscene->getPlanningFrame(), *link,
-                                    offset, target, robot_trajectory);
+      success =
+          planCartesianToPose(group, current_robot_state, *link, offset, target, robot_trajectory);
     }
   }
 
