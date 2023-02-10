@@ -17,14 +17,13 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v3.4.0
     hooks:
-      # - id: check-added-large-files
+      - id: check-added-large-files
       - id: check-case-conflict
       - id: check-json
       - id: check-merge-conflict
       - id: check-symlinks
       - id: check-toml
       - id: check-yaml
-        args: ['--unsafe']
       - id: debug-statements
       - id: destroyed-symlinks
       - id: detect-private-key
@@ -43,7 +42,7 @@ repos:
       - id: clang-format
         name: clang-format
         description: Format files with ClangFormat.
-        entry: clang-format-10
+        entry: clang-format-12
         language: system
         files: \.(c|cc|cxx|cpp|frag|glsl|h|hpp|hxx|ih|ispc|ipp|java|js|m|proto|vert)$
         args: ['-fallback-style=none', '-i']

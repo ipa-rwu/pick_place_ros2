@@ -1,0 +1,10 @@
+repositories:
+  aruco_ros:
+    type: git
+    url: https://github.com/pal-robotics/aruco_ros.git
+    version: humble-devel
+
+  rosparam_shortcuts:
+      type: git
+      url: https://github.com/PickNikRobotics/rosparam_shortcuts.git
+      version: ros2
