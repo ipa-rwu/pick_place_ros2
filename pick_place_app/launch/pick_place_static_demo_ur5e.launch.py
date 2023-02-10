@@ -12,7 +12,7 @@ def generate_launch_description():
 
     pick_place_demo = Node(
         package="pick_place_app",
-        executable="pick_place_task_demo",
+        executable="pick_place_static_demo",
         output="screen",
         # prefix=["gdb -ex run --args"],
         # prefix=["xterm -e gdb -ex run --args"],
@@ -20,7 +20,7 @@ def generate_launch_description():
             os.path.join(
                 get_package_share_directory("pick_place_app"),
                 "config",
-                "pick_place_task_ur5e.yaml",
+                "pick_place_static_ur5e.yaml",
             ),
             moveit_config,
         ],

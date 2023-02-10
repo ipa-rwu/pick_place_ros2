@@ -58,7 +58,6 @@ public:
   };
 
   ComputePathSkill(rclcpp::Node::SharedPtr node, const Parameters& parameters,
-                   moveit::core::RobotModelPtr robot_model,
                    robot_model_loader::RobotModelLoaderPtr robot_model_loader);
 
   ~ComputePathSkill();
@@ -139,6 +138,8 @@ public:
                        robot_trajectory::RobotTrajectoryPtr& robot_trajectory,
                        const std::string& ik_frame_id = "");
 
+  bool checkCollision(const planning_scene::PlanningSceneConstPtr& current_scene);
+
   planning_pipeline::PlanningPipelinePtr planning_pipeline_;
 
 protected:
@@ -197,7 +198,6 @@ private:
 
   rclcpp::Publisher<moveit_msgs::msg::DisplayTrajectory>::SharedPtr traj_publisher_;
   ComputePathSkill::Parameters parameters_;
-  moveit::core::RobotModelPtr robot_model_;
   planning_scene_monitor::PlanningSceneMonitorPtr psm_;
   robot_model_loader::RobotModelLoaderPtr robot_model_loader_;
   trajectory_processing::TimeOptimalTrajectoryGeneration time_parametrization_;

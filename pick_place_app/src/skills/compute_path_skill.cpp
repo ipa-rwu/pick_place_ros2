@@ -43,28 +43,26 @@ void ComputePathSkill::Parameters::loadParameters(const rclcpp::Node::SharedPtr&
 
 ComputePathSkill::ComputePathSkill(rclcpp::Node::SharedPtr node,
                                    const ComputePathSkill::Parameters& parameters,
-                                   moveit::core::RobotModelPtr robot_model,
                                    robot_model_loader::RobotModelLoaderPtr robot_model_loader)
-  : node_(node)
-  , parameters_(parameters)
-  , robot_model_(robot_model)
-  , robot_model_loader_(robot_model_loader)
+  : node_(node), parameters_(parameters), robot_model_loader_(robot_model_loader)
 {
-  psm_.reset(new planning_scene_monitor::PlanningSceneMonitor(node_, robot_model_loader_));
-
+  planning_scene_monitor::PlanningSceneMonitorPtr psm(
+      new planning_scene_monitor::PlanningSceneMonitor(node_, "robot_description"));
+  // psm_.reset();
+  // psm_ = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(node_, robot_model_loader_);
   /* listen for planning scene messages on topic /XXX and apply them to the internal planning scene
                        the internal planning scene accordingly */
-  psm_->startSceneMonitor();
+  // psm_->startSceneMonitor();
   /* listens to changes of world geometry, collision objects, and (optionally) octomaps
                                 world geometry, collision objects and optionally octomaps */
-  psm_->startWorldGeometryMonitor();
+  // psm_->startWorldGeometryMonitor();
   /* listen to joint state updates as well as changes in attached collision objects
                         and update the internal planning scene accordingly*/
-  psm_->startStateMonitor();
+  // psm_->startStateMonitor();
 
   /* Set up a PlanningPipeline, will use it generate plan */
-  planning_pipeline_.reset(new planning_pipeline::PlanningPipeline(
-      robot_model_, node_, "", "planning_plugin", "request_adapters"));
+  // planning_pipeline_.reset(new planning_pipeline::PlanningPipeline(
+  //     robot_model_, node_, "", "planning_plugin", "request_adapters"));
 }
 
 ComputePathSkill::~ComputePathSkill() = default;
@@ -359,6 +357,28 @@ bool ComputePathSkill::planRelativeCartesian(moveit::core::RobotState& current_r
   return success;
 }
 
+bool ComputePathSkill::checkCollision(const planning_scene::PlanningSceneConstPtr& current_scene)
+{
+  moveit_msgs::msg::RobotState current_robot_state_msg;
+  moveit::core::robotStateToRobotStateMsg(current_scene->getCurrentState(), current_robot_state_msg);
+  RCLCPP_INFO(LOGGER, "Before planning, current robot state is: %s",
+              moveit_msgs::msg::to_yaml(current_robot_state_msg).c_str());
+  collision_detection::CollisionRequest collision_req;
+  collision_detection::CollisionResult collision_res;
+
+  current_scene->checkCollision(collision_req, collision_res);
+  for (collision_detection::CollisionResult::ContactMap::const_iterator contacts_iter =
+           collision_res.contacts.begin();
+       contacts_iter != collision_res.contacts.end(); ++contacts_iter)
+  {
+    RCLCPP_INFO(LOGGER, "Link [%s]: has collision with Link[%s] ",
+                contacts_iter->first.first.c_str(), contacts_iter->first.second.c_str());
+  }
+  RCLCPP_INFO_STREAM(LOGGER, "Current state is " << (collision_res.collision ? "in" : "not in")
+                                                 << " self collision");
+  return collision_res.collision;
+}
+
 bool ComputePathSkill::computeRelative(const std::string& group,
                                        geometry_msgs::msg::Vector3 direction,
                                        robot_trajectory::RobotTrajectoryPtr& robot_trajectory,
@@ -439,10 +459,27 @@ bool ComputePathSkill::computePath(const std::string& group, const boost::any& g
     return false;
   }
 
+  moveit_msgs::msg::RobotState current_state_msg;
+  moveit::core::robotStateToRobotStateMsg(current_robot_state, current_state_msg);
+  RCLCPP_INFO(LOGGER, "Before call getJointStateGoal, current_state_msg: %s",
+              moveit_msgs::msg::to_yaml(current_state_msg).c_str());
+
   if (getJointStateGoal(goal, jmg, target_robot_state))
   {
+    current_state_msg = moveit_msgs::msg::RobotState();
+    moveit::core::robotStateToRobotStateMsg(current_robot_state, current_state_msg);
+    RCLCPP_INFO(LOGGER, "After call getJointStateGoal, current_state_msg: %s",
+                moveit_msgs::msg::to_yaml(current_state_msg).c_str());
+
+    moveit_msgs::msg::RobotState target_state_msg;
+    moveit::core::robotStateToRobotStateMsg(target_robot_state, target_state_msg);
+    RCLCPP_INFO(LOGGER, "After call getJointStateGoal, target_state_msg: %s",
+                moveit_msgs::msg::to_yaml(target_state_msg).c_str());
     RCLCPP_INFO(LOGGER, "get a joint state goal");
+
+    checkCollision(lscene);
     success = plan(lscene, target_robot_state, jmg, timeout, robot_trajectory, path_constraints);
+    return true;
   }
   else
   {
@@ -474,11 +511,14 @@ bool ComputePathSkill::computePath(const std::string& group, const boost::any& g
           tf2::toMsg(current_robot_state.getGlobalLinkTransform(link));
       RCLCPP_INFO(LOGGER, "Current pose of %s: %s", link->getName().c_str(),
                   geometry_msgs::msg::to_yaml(end_pose).c_str());
+
+      checkCollision(lscene);
       success =
           plan(lscene, *link, offset, target, jmg, timeout, robot_trajectory, path_constraints);
     }
     else
     {
+      checkCollision(lscene);
       moveit_msgs::msg::RobotTrajectory robot_traj_msg;
       success =
           planCartesianToPose(group, current_robot_state, *link, offset, target, robot_trajectory);

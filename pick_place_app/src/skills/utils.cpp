@@ -85,7 +85,7 @@ T getValueFromYaml(const YAML::Node& node, const std::string& key)
   }
 }
 
-void loadPathConstraintsFromYaml(const std::string path_constraints_yaml,
+bool loadPathConstraintsFromYaml(const std::string path_constraints_yaml,
                                  moveit_msgs::msg::Constraints& path_constraints)
 {
   std::string params_file = ament_index_cpp::get_package_share_directory(CURRENT_PKG) + "/config/" +
@@ -98,7 +98,8 @@ void loadPathConstraintsFromYaml(const std::string path_constraints_yaml,
   {
     std::stringstream ss;
     ss << "The name tag was empty in '" << path_constraints_yaml << "' file ";
-    throw YAML::Exception(doc["name"].Mark(), ss.str());
+    RCLCPP_ERROR(LOGGER, "%s", ss.str().c_str());
+    return false;
   }
   path_constraints.name = path_constraint_name;
   try
@@ -120,10 +121,11 @@ void loadPathConstraintsFromYaml(const std::string path_constraints_yaml,
   {
     RCLCPP_WARN(LOGGER, "joint_constraints aren't defined in %s", path_constraints_yaml.c_str());
   }
+  return true;
   // RWU TODO: parser PositionConstraint OrientationConstraint  VisibilityConstraint
 }
 
-void loadPointsFromYaml(const std::string waypoints_file, geometry_msgs::msg::PoseArray& pose_array)
+bool loadPointsFromYaml(const std::string waypoints_file, geometry_msgs::msg::PoseArray& pose_array)
 {
   std::string params_file =
       ament_index_cpp::get_package_share_directory(CURRENT_PKG) + "/config/" + waypoints_file;
@@ -137,16 +139,15 @@ void loadPointsFromYaml(const std::string waypoints_file, geometry_msgs::msg::Po
     {
       std::stringstream ss;
       ss << "The frame_id tag was empty in '" << waypoints_file << "' file ";
-      throw YAML::Exception(doc["frame_id"].Mark(), ss.str());
+      RCLCPP_ERROR(LOGGER, "%s", ss.str().c_str());
+      return false;
     }
-    else
-    {
-      pose_array.header.frame_id = frame_id;
-    }
+    pose_array.header.frame_id = frame_id;
   }
   catch (YAML::Exception& e)
   {
-    RCLCPP_WARN(LOGGER, "frame_id aren't defined in %s", waypoints_file.c_str());
+    RCLCPP_ERROR(LOGGER, "frame_id aren't defined in %s", waypoints_file.c_str());
+    return false;
   }
 
   try
@@ -164,7 +165,9 @@ void loadPointsFromYaml(const std::string waypoints_file, geometry_msgs::msg::Po
   catch (YAML::Exception& e)
   {
     RCLCPP_WARN(LOGGER, "pose x,y,z aren't defined in %s", waypoints_file.c_str());
+    return false;
   }
+  return true;
 }
 
 }  // namespace utils

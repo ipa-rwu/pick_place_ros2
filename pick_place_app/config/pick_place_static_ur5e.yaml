@@ -1,18 +1,20 @@
-pick_place_demo:
+pick_place_static_demo:
 # /**:
   ros__parameters:
     arm_group_name: "arm"
-    object_marker_id: 42
-    place_marker_id: 41
-    detect_state_name: "detect"
+    object_name: "object_box"
+    object_frame_id: "base_link"
+    place_frame_id: "base_link"
+    place_pose: [-0.15, 0.55, 0.0, 1.0, 0.0, 0.0, 0.0]
+    object_pose: [0.25, 0.70, 0.00851, 1.0, 0.0, 0.0, 0.0]
+    detect_state_name: "home"
     ik_frame: "tool_tip"
     planning_plugin: "ompl_interface/OMPLPlanner"
-    planner_id: "RRTstarkConfigDefault"
+    planner_id: "SBLkConfigDefault"
     planning_timeout: 10.0
     num_planning_attempts: 10
-    pick_offset: 0.3 # pincer_height:0.014
-    place_offset: 0.1
-    retreat_offset: 0.5
+    pick_offset: 0.1 # pincer_height:0.014
+    place_offset: 0.5
     io_service_name: "/mock_io_server/set_io"
     # io_service_name: "/io_and_status_controller/set_io"
     box_size: [0.017, 0.017, 0.017]
@@ -24,3 +26,4 @@ pick_place_demo:
     marker_topic_name: "/marker_publisher/markers"
     find_marker_timeout_seconds: 10
     path_constraints_file: "path_constraints.yaml"
+    retreat_offset: 0.3
