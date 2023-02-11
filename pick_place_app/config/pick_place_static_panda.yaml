@@ -1,0 +1,29 @@
+pick_place_static_demo:
+# /**:
+  ros__parameters:
+    arm_group_name: "panda_arm"
+    object_name: "object_box"
+    object_frame_id: "panda_link0"
+    place_frame_id: "panda_link0"
+    place_pose: [-0.15, 0.55, 0.0, 1.0, 0.0, 0.0, 0.0]
+    object_pose: [0.25, 0.70, 0.00851, 1.0, 0.0, 0.0, 0.0]
+    detect_state_name: "home"
+    ik_frame: "panda_hand"
+    planning_plugin: "ompl_interface/OMPLPlanner"
+    planner_id: "SBLkConfigDefault"
+    planning_timeout: 10.0
+    num_planning_attempts: 10
+    pick_offset: 0.1 # pincer_height:0.014
+    place_offset: 0.5
+    io_service_name: "/mock_io_server/set_io"
+    # io_service_name: "/io_and_status_controller/set_io"
+    box_size: [0.017, 0.017, 0.017]
+    step_size: 0.005
+    lift_distance: 0.15
+    min_fraction: 0.60
+    max_acceleration_scaling_factor: 0.3
+    max_velocity_scaling_factor: 0.1
+    marker_topic_name: "/marker_publisher/markers"
+    find_marker_timeout_seconds: 10
+    path_constraints_file: "path_constraints.yaml"
+    retreat_offset: 0.3

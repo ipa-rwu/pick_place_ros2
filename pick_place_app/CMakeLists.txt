@@ -31,18 +31,8 @@ add_subdirectory(src/skills)
 add_subdirectory(src/app)
 
 ##########
-# Build pick place with object pose in param ##
+# Build pick place with object detection ##
 ##########
-
-set(PICK_PLACE_TASK_DEPS
-	ament_cmake
-	rclcpp
-	rosparam_shortcuts
-	moveit_core
-	moveit_ros_planning_interface
-	moveit_ros_planning
-)
-
 set(pick_place_task pick_place_task_demo)
 add_executable(${pick_place_task} src/main_pick_place_task.cpp)
 target_compile_options(${pick_place_task} PUBLIC -g -O0)
@@ -55,6 +45,10 @@ target_include_directories(${pick_place_task}
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 
+
+##########
+# Build point to  point ##
+##########
 set(point_to_point_task point_to_point_demo)
 add_executable(${point_to_point_task} src/main_point_to_point.cpp)
 target_compile_options(${point_to_point_task} PUBLIC -g -O0)
@@ -67,9 +61,25 @@ target_include_directories(${point_to_point_task}
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 
+##########
+# Build pick place with object pose in param ##
+##########
+set(pick_place_static_demo pick_place_static_demo)
+add_executable(${pick_place_static_demo} src/main_pick_place_static.cpp)
+target_compile_options(${pick_place_static_demo} PUBLIC -g -O0)
+target_link_libraries(${pick_place_static_demo}
+  ${PROJECT_NAME}_app
+)
+
+target_include_directories(${pick_place_static_demo}
+  PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+
 install(TARGETS
   ${pick_place_task}
   ${point_to_point_task}
+  ${pick_place_static_demo}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME})
