@@ -36,9 +36,14 @@ PointToPoinTask::PointToPoinTask(const rclcpp::Node::SharedPtr& node,
   parameters_comp_path_skill.loadParameters(node_);
 
   rm_loader_.reset(new robot_model_loader::RobotModelLoader(node_, "robot_description"));
-  robot_model_ = rm_loader_->getModel();
 
   psi_ = std::make_shared<moveit::planning_interface::PlanningSceneInterface>();
+
+  psm_.reset(new planning_scene_monitor::PlanningSceneMonitor(node, "robot_description"));
+
+  psm_->startSceneMonitor();
+  psm_->startWorldGeometryMonitor();
+  psm_->startStateMonitor();
 
   initSkills();
 }
@@ -46,7 +51,7 @@ PointToPoinTask::PointToPoinTask(const rclcpp::Node::SharedPtr& node,
 void PointToPoinTask::initSkills()
 {
   comp_path_skill = std::make_shared<robot_skills::ComputePathSkill>(
-      node_, parameters_comp_path_skill, robot_model_, rm_loader_);
+      node_, parameters_comp_path_skill, rm_loader_, psm_);
   exec_traj_skill = std::make_shared<robot_skills::ExecuteTrajectorySkill>(node_);
   modify_planning_scene_skill =
       std::make_shared<robot_skills::ModifyPlanningSceneSkill>(node_, psi_);

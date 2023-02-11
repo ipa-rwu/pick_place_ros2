@@ -58,8 +58,8 @@ public:
   };
 
   ComputePathSkill(rclcpp::Node::SharedPtr node, const Parameters& parameters,
-                   moveit::core::RobotModelPtr robot_model,
-                   robot_model_loader::RobotModelLoaderPtr robot_model_loader);
+                   robot_model_loader::RobotModelLoaderPtr robot_model_loader,
+                   planning_scene_monitor::PlanningSceneMonitorPtr psm);
 
   ~ComputePathSkill();
 
@@ -79,8 +79,7 @@ public:
    * @return false
    */
   bool
-  plan(const planning_scene::PlanningSceneConstPtr& current_scene,
-       const moveit::core::RobotState& target_robot_state, const moveit::core::JointModelGroup* jmg,
+  plan(const moveit::core::RobotState& target_robot_state, const moveit::core::JointModelGroup* jmg,
        double timeout, robot_trajectory::RobotTrajectoryPtr& result,
        const moveit_msgs::msg::Constraints& path_constraints = moveit_msgs::msg::Constraints());
 
@@ -97,8 +96,7 @@ public:
    * @return true
    * @return false
    */
-  bool plan(const planning_scene::PlanningSceneConstPtr& current_scene,
-            const moveit::core::LinkModel& link, const Eigen::Isometry3d& offset,
+  bool plan(const moveit::core::LinkModel& link, const Eigen::Isometry3d& offset,
             const Eigen::Isometry3d& target_eigen, const moveit::core::JointModelGroup* jmg,
             double timeout, robot_trajectory::RobotTrajectoryPtr& result,
             const moveit_msgs::msg::Constraints& path_constraints = moveit_msgs::msg::Constraints());
@@ -138,6 +136,8 @@ public:
   bool computeRelative(const std::string& group, geometry_msgs::msg::Vector3 direction,
                        robot_trajectory::RobotTrajectoryPtr& robot_trajectory,
                        const std::string& ik_frame_id = "");
+
+  bool checkCollision(const planning_scene::PlanningSceneConstPtr& current_scene);
 
   planning_pipeline::PlanningPipelinePtr planning_pipeline_;
 
@@ -197,7 +197,6 @@ private:
 
   rclcpp::Publisher<moveit_msgs::msg::DisplayTrajectory>::SharedPtr traj_publisher_;
   ComputePathSkill::Parameters parameters_;
-  moveit::core::RobotModelPtr robot_model_;
   planning_scene_monitor::PlanningSceneMonitorPtr psm_;
   robot_model_loader::RobotModelLoaderPtr robot_model_loader_;
   trajectory_processing::TimeOptimalTrajectoryGeneration time_parametrization_;

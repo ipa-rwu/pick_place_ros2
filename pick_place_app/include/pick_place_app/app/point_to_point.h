@@ -49,6 +49,7 @@ private:
   rclcpp::Node::SharedPtr node_;
   robot_trajectory::RobotTrajectoryPtr robot_trajectory_;
   moveit_msgs::msg::RobotTrajectory trajectory_msg_;
+  planning_scene_monitor::PlanningSceneMonitorPtr psm_;
 };
 
 }  // namespace robot_application

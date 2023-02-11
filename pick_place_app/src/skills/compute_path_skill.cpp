@@ -12,6 +12,8 @@
 
 namespace robot_skills
 {
+using namespace std::chrono_literals;
+
 static const rclcpp::Logger LOGGER = rclcpp::get_logger("compute_path_skill");
 
 void ComputePathSkill::Parameters::loadParameters(const rclcpp::Node::SharedPtr& node)
@@ -43,28 +45,16 @@ void ComputePathSkill::Parameters::loadParameters(const rclcpp::Node::SharedPtr&
 
 ComputePathSkill::ComputePathSkill(rclcpp::Node::SharedPtr node,
                                    const ComputePathSkill::Parameters& parameters,
-                                   moveit::core::RobotModelPtr robot_model,
-                                   robot_model_loader::RobotModelLoaderPtr robot_model_loader)
-  : node_(node)
-  , parameters_(parameters)
-  , robot_model_(robot_model)
-  , robot_model_loader_(robot_model_loader)
+                                   robot_model_loader::RobotModelLoaderPtr robot_model_loader,
+                                   planning_scene_monitor::PlanningSceneMonitorPtr psm)
+  : node_(node), parameters_(parameters), robot_model_loader_(robot_model_loader), psm_(psm)
+
 {
-  psm_.reset(new planning_scene_monitor::PlanningSceneMonitor(node_, robot_model_loader_));
-
-  /* listen for planning scene messages on topic /XXX and apply them to the internal planning scene
-                       the internal planning scene accordingly */
-  psm_->startSceneMonitor();
-  /* listens to changes of world geometry, collision objects, and (optionally) octomaps
-                                world geometry, collision objects and optionally octomaps */
-  psm_->startWorldGeometryMonitor();
-  /* listen to joint state updates as well as changes in attached collision objects
-                        and update the internal planning scene accordingly*/
-  psm_->startStateMonitor();
-
   /* Set up a PlanningPipeline, will use it generate plan */
   planning_pipeline_.reset(new planning_pipeline::PlanningPipeline(
-      robot_model_, node_, "", "planning_plugin", "request_adapters"));
+      robot_model_loader->getModel(), node_, "", "planning_plugin", "request_adapters"));
+
+  auto robot_state_msg = moveit_msgs::msg::RobotState();
 }
 
 ComputePathSkill::~ComputePathSkill() = default;
@@ -199,8 +189,7 @@ bool ComputePathSkill::getPointGoal(const boost::any& goal, const Eigen::Isometr
   return true;
 }
 
-bool ComputePathSkill::plan(const planning_scene::PlanningSceneConstPtr& current_scene,
-                            const moveit::core::RobotState& target_robot_state,
+bool ComputePathSkill::plan(const moveit::core::RobotState& target_robot_state,
                             const moveit::core::JointModelGroup* jmg, double timeout,
                             robot_trajectory::RobotTrajectoryPtr& result,
                             const moveit_msgs::msg::Constraints& path_constraints)
@@ -215,15 +204,21 @@ bool ComputePathSkill::plan(const planning_scene::PlanningSceneConstPtr& current
       target_robot_state, jmg, parameters_.goal_joint_tolerance);
   req.path_constraints = path_constraints;
 
-  bool success = planning_pipeline_->generatePlan(current_scene, req, res);
+  auto start_robot_state = moveit_msgs::msg::RobotState();
+  moveit::core::robotStateToRobotStateMsg(
+      planning_scene_monitor::LockedPlanningSceneRO(psm_)->getCurrentState(), start_robot_state);
+  RCLCPP_INFO(LOGGER, "Ready for planning: robot start state: %s",
+              moveit_msgs::msg::to_yaml(start_robot_state).c_str());
+
+  planning_scene_monitor::LockedPlanningSceneRO lscene(psm_);
+  bool success = planning_pipeline_->generatePlan(lscene, req, res);
   result = res.trajectory_;
   time_parametrization_.computeTimeStamps(*result, parameters_.max_velocity_scaling_factor,
                                           parameters_.max_acceleration_scaling_factor);
   return success;
 }
 
-bool ComputePathSkill::plan(const planning_scene::PlanningSceneConstPtr& current_scene,
-                            const moveit::core::LinkModel& link, const Eigen::Isometry3d& offset,
+bool ComputePathSkill::plan(const moveit::core::LinkModel& link, const Eigen::Isometry3d& offset,
                             const Eigen::Isometry3d& target_eigen,
                             const moveit::core::JointModelGroup* jmg, double timeout,
                             robot_trajectory::RobotTrajectoryPtr& result,
@@ -233,21 +228,21 @@ bool ComputePathSkill::plan(const planning_scene::PlanningSceneConstPtr& current
   initMotionPlanRequest(req, jmg, timeout);
 
   geometry_msgs::msg::PoseStamped target;
-  target.header.frame_id = current_scene->getPlanningFrame();
+  target.header.frame_id = planning_scene_monitor::LockedPlanningSceneRO(psm_)->getPlanningFrame();
   target.pose = tf2::toMsg(target_eigen * offset.inverse());
-  RCLCPP_INFO(LOGGER, "Start Plan, goal:\n target: %s\n posestamp: %s", link.getName().c_str(),
-              geometry_msgs::msg::to_yaml(target).c_str());
+  RCLCPP_INFO(LOGGER, "Prepare for planning, goal:\n target frame: %s\n posestamp: %s",
+              link.getName().c_str(), geometry_msgs::msg::to_yaml(target).c_str());
 
   auto new_jmg = jmg;
   kinematics::KinematicsQueryOptions o;
   o.return_approximate_solution = false;
-  auto target_robot_state = current_scene->getCurrentState();
+  auto target_robot_state = planning_scene_monitor::LockedPlanningSceneRO(psm_)->getCurrentState();
   if (target_robot_state.setFromIK(new_jmg, target.pose, link.getName(), 0.0))
   {
-    sensor_msgs::msg::JointState current_joint_state;
-    moveit::core::robotStateToJointStateMsg(target_robot_state, current_joint_state);
+    sensor_msgs::msg::JointState target_joint_state;
+    moveit::core::robotStateToJointStateMsg(target_robot_state, target_joint_state);
     RCLCPP_DEBUG(LOGGER, "Get IK, goal joint state: %s",
-                 sensor_msgs::msg::to_yaml(current_joint_state).c_str());
+                 sensor_msgs::msg::to_yaml(target_joint_state).c_str());
   }
   else
   {
@@ -262,9 +257,16 @@ bool ComputePathSkill::plan(const planning_scene::PlanningSceneConstPtr& current
                                                       parameters_.goal_orientation_tolerance);
   req.path_constraints = path_constraints;
 
+  auto start_robot_state = moveit_msgs::msg::RobotState();
+  moveit::core::robotStateToRobotStateMsg(
+      planning_scene_monitor::LockedPlanningSceneRO(psm_)->getCurrentState(), start_robot_state);
+  RCLCPP_INFO(LOGGER, "Ready for planning: robot start state: %s",
+              moveit_msgs::msg::to_yaml(start_robot_state).c_str());
+
   planning_interface::MotionPlanResponse res;
   planning_scene_monitor::LockedPlanningSceneRO lscene(psm_);
   bool success = planning_pipeline_->generatePlan(lscene, req, res);
+
   if (success)
   {
     result = res.trajectory_;
@@ -359,6 +361,28 @@ bool ComputePathSkill::planRelativeCartesian(moveit::core::RobotState& current_r
   return success;
 }
 
+bool ComputePathSkill::checkCollision(const planning_scene::PlanningSceneConstPtr& current_scene)
+{
+  moveit_msgs::msg::RobotState current_robot_state_msg;
+  moveit::core::robotStateToRobotStateMsg(current_scene->getCurrentState(), current_robot_state_msg);
+  RCLCPP_INFO(LOGGER, "Before planning, current robot state is: %s",
+              moveit_msgs::msg::to_yaml(current_robot_state_msg).c_str());
+  collision_detection::CollisionRequest collision_req;
+  collision_detection::CollisionResult collision_res;
+
+  current_scene->checkCollision(collision_req, collision_res);
+  for (collision_detection::CollisionResult::ContactMap::const_iterator contacts_iter =
+           collision_res.contacts.begin();
+       contacts_iter != collision_res.contacts.end(); ++contacts_iter)
+  {
+    RCLCPP_INFO(LOGGER, "Link [%s]: has collision with Link[%s] ",
+                contacts_iter->first.first.c_str(), contacts_iter->first.second.c_str());
+  }
+  RCLCPP_INFO_STREAM(LOGGER, "Current state is " << (collision_res.collision ? "in" : "not in")
+                                                 << " self collision");
+  return collision_res.collision;
+}
+
 bool ComputePathSkill::computeRelative(const std::string& group,
                                        geometry_msgs::msg::Vector3 direction,
                                        robot_trajectory::RobotTrajectoryPtr& robot_trajectory,
@@ -420,10 +444,11 @@ bool ComputePathSkill::computePath(const std::string& group, const boost::any& g
                                    const std::string& ik_frame_id, bool compute_cartesian_path,
                                    const moveit_msgs::msg::Constraints& path_constraints)
 {
-  planning_scene_monitor::LockedPlanningSceneRO lscene(psm_);
-  const moveit::core::RobotModelConstPtr& robot_model = lscene->getRobotModel();
-  const moveit::core::JointModelGroup* jmg = robot_model->getJointModelGroup(group);
-  moveit::core::RobotState current_robot_state = lscene->getCurrentState();
+  const moveit::core::JointModelGroup* jmg =
+      planning_scene_monitor::LockedPlanningSceneRO(psm_)->getRobotModel()->getJointModelGroup(
+          group);
+  moveit::core::RobotState current_robot_state =
+      planning_scene_monitor::LockedPlanningSceneRO(psm_)->getCurrentState();
   moveit::core::RobotState target_robot_state = current_robot_state;
   double timeout = parameters_.planning_timeout;
   bool success;
@@ -439,15 +464,21 @@ bool ComputePathSkill::computePath(const std::string& group, const boost::any& g
     return false;
   }
 
+  moveit_msgs::msg::RobotState current_state_msg;
+  moveit::core::robotStateToRobotStateMsg(current_robot_state, current_state_msg);
+  RCLCPP_DEBUG(LOGGER, "Before transfering goal, current robot state: %s",
+               moveit_msgs::msg::to_yaml(current_state_msg).c_str());
+
+  planning_scene_monitor::LockedPlanningSceneRO lscene(psm_);
   if (getJointStateGoal(goal, jmg, target_robot_state))
   {
-    RCLCPP_INFO(LOGGER, "get a joint state goal");
-    success = plan(lscene, target_robot_state, jmg, timeout, robot_trajectory, path_constraints);
+    checkCollision(lscene);
+    success = plan(target_robot_state, jmg, timeout, robot_trajectory, path_constraints);
+    return true;
   }
   else
   {
-    planning_scene_monitor::LockedPlanningSceneRO lscene(psm_);
-    auto current_robot_state = lscene->getCurrentState();
+    current_robot_state = lscene->getCurrentState();
 
     Eigen::Isometry3d target;
 
@@ -474,11 +505,13 @@ bool ComputePathSkill::computePath(const std::string& group, const boost::any& g
           tf2::toMsg(current_robot_state.getGlobalLinkTransform(link));
       RCLCPP_INFO(LOGGER, "Current pose of %s: %s", link->getName().c_str(),
                   geometry_msgs::msg::to_yaml(end_pose).c_str());
-      success =
-          plan(lscene, *link, offset, target, jmg, timeout, robot_trajectory, path_constraints);
+
+      checkCollision(lscene);
+      success = plan(*link, offset, target, jmg, timeout, robot_trajectory, path_constraints);
     }
     else
     {
+      checkCollision(lscene);
       moveit_msgs::msg::RobotTrajectory robot_traj_msg;
       success =
           planCartesianToPose(group, current_robot_state, *link, offset, target, robot_trajectory);
