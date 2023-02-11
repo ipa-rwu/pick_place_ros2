@@ -76,10 +76,28 @@ target_include_directories(${pick_place_static_demo}
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 
+
+##########
+# Build test planning pipeline monitor demo ##
+##########
+set(test_psm_demo test_psm_demo)
+add_executable(${test_psm_demo} src/main_test_psm.cpp)
+target_compile_options(${test_psm_demo} PUBLIC -g -O0)
+target_link_libraries(${test_psm_demo}
+  ${PROJECT_NAME}_app
+)
+
+target_include_directories(${test_psm_demo}
+  PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+
+
 install(TARGETS
   ${pick_place_task}
   ${point_to_point_task}
   ${pick_place_static_demo}
+  ${test_psm_demo}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME})
