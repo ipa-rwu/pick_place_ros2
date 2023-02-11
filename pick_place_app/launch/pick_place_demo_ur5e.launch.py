@@ -7,7 +7,7 @@ from moveit_configs_utils import MoveItConfigsBuilder
 
 def generate_launch_description():
     moveit_config = MoveItConfigsBuilder(
-        "ur5e_workcell", package_name="ur5e_cell_moveit_config"
+        "ur5e_workcell_fake", package_name="ur5e_cell_moveit_config"
     ).to_dict()
 
     pick_place_demo = Node(

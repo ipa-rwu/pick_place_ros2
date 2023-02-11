@@ -15,17 +15,14 @@ void PickPlaceTask::Parameters::loadParameters(const rclcpp::Node::SharedPtr& no
   size_t errors = 0;
   errors += !rosparam_shortcuts::get(node, "arm_group_name",
                                      arm_group_name);  // e.g. panda_arm
-  errors += !rosparam_shortcuts::get(node, "object_pose", object_pose);
-  errors += !rosparam_shortcuts::get(node, "place_pose", place_pose);
-  errors += !rosparam_shortcuts::get(node, "object_frame_id", object_frame_id);
-  errors += !rosparam_shortcuts::get(node, "place_frame_id", place_frame_id);
-  errors += !rosparam_shortcuts::get(node, "object_name", object_name);
   errors += !rosparam_shortcuts::get(node, "detect_state_name", detect_state_name);
   errors += !rosparam_shortcuts::get(node, "pick_offset", pick_offset);
+  errors += !rosparam_shortcuts::get(node, "place_offset", place_offset);
   errors += !rosparam_shortcuts::get(node, "box_size", box_size);
-  errors += !rosparam_shortcuts::get(node, "hand_group_name", hand_group_name);
-  errors += !rosparam_shortcuts::get(node, "hand_frame", hand_frame);
+  errors += !rosparam_shortcuts::get(node, "object_marker_id", object_marker_id);
+  errors += !rosparam_shortcuts::get(node, "place_marker_id", place_marker_id);
   errors += !rosparam_shortcuts::get(node, "path_constraints_file", path_constraints_file);
+  errors += !rosparam_shortcuts::get(node, "retreat_offset", retreat_offset);
 
   rosparam_shortcuts::shutdownIfError(errors);
 }
@@ -36,28 +33,33 @@ PickPlaceTask::PickPlaceTask(const rclcpp::Node::SharedPtr& node,
 {
   parameters_comp_path_skill.loadParameters(node_);
   parameters_io_gripper_skill.loadParameters(node_);
+  parameters_detect_aruco_marker_skill.loadParameters(node_);
 
   rm_loader_.reset(new robot_model_loader::RobotModelLoader(node_, "robot_description"));
-  robot_model_ = rm_loader_->getModel();
-
-  planning_scene_ = std::make_shared<planning_scene::PlanningScene>(robot_model_);
 
   psi_ = std::make_shared<moveit::planning_interface::PlanningSceneInterface>();
+
+  psm_.reset(new planning_scene_monitor::PlanningSceneMonitor(node, "robot_description"));
+
+  psm_->startSceneMonitor();
+  psm_->startWorldGeometryMonitor();
+  psm_->startStateMonitor();
 
   initSkills();
 }
 
 void PickPlaceTask::initSkills()
 {
-  // comp_path_skill = std::make_shared<robot_skills::ComputePathSkill>(
-  //     node_, parameters_comp_path_skill, robot_model_, rm_loader_);
   comp_path_skill = std::make_shared<robot_skills::ComputePathSkill>(
-      node_, parameters_comp_path_skill, robot_model_, rm_loader_);
+      node_, parameters_comp_path_skill, rm_loader_, psm_);
   exec_traj_skill = std::make_shared<robot_skills::ExecuteTrajectorySkill>(node_);
   io_gripper_skill =
       std::make_shared<robot_skills::IOGripperWithURSkill>(node_, parameters_io_gripper_skill);
   modify_planning_scene_skill =
       std::make_shared<robot_skills::ModifyPlanningSceneSkill>(node_, psi_);
+  detect_aruco_marker_skill = std::make_shared<robot_skills::DetectArucoMarkerSkill>(
+      node_, parameters_detect_aruco_marker_skill);
+
   RCLCPP_INFO(LOGGER, "Initial skills");
 }
 
@@ -69,12 +71,14 @@ void PickPlaceTask::executeTask()
 {
   auto scene_diff_ = planning_scene_->diff();
   bool step_success = false;
+  object_pose_ptr_.reset();
+  place_pose_ptr_.reset();
 
   /**************************
    * Move To Detect Pose *
    **************************/
   step_success =
-      comp_path_skill->computePath(planning_scene_, pick_place_task_param_.arm_group_name,
+      comp_path_skill->computePath(pick_place_task_param_.arm_group_name,
                                    pick_place_task_param_.detect_state_name, robot_trajectory);
   if (step_success)
   {
@@ -92,15 +96,31 @@ void PickPlaceTask::executeTask()
    * Find Object *
    **************************/
   /** Request Object Pose **/
-  auto object_box = modify_planning_scene_skill->createBox(
-      pick_place_task_param_.object_name, pick_place_task_param_.object_frame_id,
-      tf2::toMsg(
-          Eigen::Isometry3d(Eigen::Translation3d(pick_place_task_param_.object_pose.position.x,
-                                                 pick_place_task_param_.object_pose.position.y,
-                                                 pick_place_task_param_.object_pose.position.z))),
-      pick_place_task_param_.box_size);
+  if (step_success)
+  {
+    std::vector<int> marker_ids{ pick_place_task_param_.object_marker_id,
+                                 pick_place_task_param_.place_marker_id };
+    std::map<int, geometry_msgs::msg::PoseStamped> marker_poses;
+    step_success = detect_aruco_marker_skill->getArucoPosestamps(marker_ids, marker_poses);
+    if (step_success)
+    {
+      object_pose_ptr_ = std::make_shared<geometry_msgs::msg::PoseStamped>(
+          marker_poses[pick_place_task_param_.object_marker_id]);
+      place_pose_ptr_ = std::make_shared<geometry_msgs::msg::PoseStamped>(
+          marker_poses[pick_place_task_param_.place_marker_id]);
+      // add object
+      auto object_box =
+          modify_planning_scene_skill->createBox("box_1", object_pose_ptr_->header.frame_id,
+                                                 object_pose_ptr_->pose,
+                                                 pick_place_task_param_.box_size);
+      modify_planning_scene_skill->addObject(object_box);
 
-  modify_planning_scene_skill->addObject(object_box);
+      std::vector<double> place_box_size{ 0.020, 0.020, 0.001 };
+      auto place_box = modify_planning_scene_skill->createBox(
+          "box_2", place_pose_ptr_->header.frame_id, object_pose_ptr_->pose, place_box_size);
+      modify_planning_scene_skill->addObject(place_box);
+    }
+  }
 
   /**************************
    * Open Hand *
@@ -113,37 +133,55 @@ void PickPlaceTask::executeTask()
     rclcpp::sleep_for(1s);
   }
 
-  // /**************************
-  //  * Move To Object's Pose *
-  //  **************************/
-  // /** Move to Prepick Pose above the object **/
+  /**************************
+   * Move To Object's Pose *
+   **************************/
+  /** Move to Prepick Pose above the object **/
   if (step_success)
   {
-    scene_diff_ = planning_scene_->diff();
     geometry_msgs::msg::PointStamped pre_pick_point_msg;
-    pre_pick_point_msg.header.frame_id = pick_place_task_param_.object_frame_id;
-    pre_pick_point_msg.point.x = pick_place_task_param_.object_pose.position.x;
-    pre_pick_point_msg.point.y = pick_place_task_param_.object_pose.position.y;
-    pre_pick_point_msg.point.z =
-        pick_place_task_param_.object_pose.position.z + pick_place_task_param_.pick_offset;
+    // pre_pick_point_msg.header.frame_id = object_pose_ptr_->header.frame_id;
+    // pre_pick_point_msg.point.x = object_pose_ptr_->pose.position.x;
+    // pre_pick_point_msg.point.y = object_pose_ptr_->pose.position.y;
+    // pre_pick_point_msg.point.z =
+    //     object_pose_ptr_->pose.position.z + pick_place_task_param_.pick_offset;
+
+    pre_pick_point_msg.header.frame_id = "world";
+    pre_pick_point_msg.point.x = -0.188595;
+    pre_pick_point_msg.point.y = 0.293224;
+    pre_pick_point_msg.point.z = 1.12;
 
     trajectory_msg = moveit_msgs::msg::RobotTrajectory();
 
     RCLCPP_INFO(
         LOGGER,
-        "\n----------------------------\n Move to pre PICK pose: %s ----------------------------",
+        "\n----------------------------\n Move to pre PICK pose: %s---------------------------",
         geometry_msgs::msg::to_yaml(pre_pick_point_msg).c_str());
 
     robot_trajectory->clear();
     moveit_msgs::msg::Constraints path_constraints;
-    robot_skills::utils::loadPathConstraintsFromYaml(pick_place_task_param_.path_constraints_file,
-                                                     path_constraints);
-    RCLCPP_INFO(LOGGER, "Planning with path_constraints: %s",
-                moveit_msgs::msg::to_yaml(path_constraints).c_str());
+    // robot_skills::utils::loadPathConstraintsFromYaml(pick_place_task_param_.path_constraints_file,
+    //                                                  path_constraints);
+    // RCLCPP_INFO(LOGGER, "Planning with path_constraints: %s",
+    //             moveit_msgs::msg::to_yaml(path_constraints).c_str());
 
     step_success =
-        comp_path_skill->computePath(planning_scene_, pick_place_task_param_.arm_group_name,
-                                     pre_pick_point_msg, robot_trajectory, false, path_constraints);
+        comp_path_skill->computePath(pick_place_task_param_.arm_group_name, pre_pick_point_msg,
+                                     robot_trajectory, parameters_comp_path_skill.ik_frame, false,
+                                     path_constraints);
+    int i = 0;
+
+    while (step_success == false && i < 10)
+    {
+      step_success =
+          comp_path_skill->computePath(pick_place_task_param_.arm_group_name, pre_pick_point_msg,
+                                       robot_trajectory, parameters_comp_path_skill.ik_frame, false,
+                                       path_constraints);
+      i++;
+      rclcpp::sleep_for(1s);
+      RCLCPP_ERROR(LOGGER, "Try %d times", i);
+    }
+
     if (step_success)
     {
       trajectory_msg = moveit_msgs::msg::RobotTrajectory();
@@ -200,8 +238,7 @@ void PickPlaceTask::executeTask()
   if (step_success)
   {
     auto direction = geometry_msgs::msg::Vector3();
-    direction.y = pick_place_task_param_.place_pose.position.x -
-                  pick_place_task_param_.object_pose.position.x;
+    direction.x = object_pose_ptr_->pose.position.x - place_pose_ptr_->pose.position.x;
     step_success = comp_path_skill->computeRelative(pick_place_task_param_.arm_group_name,
                                                     direction, robot_trajectory);
     if (step_success)
@@ -216,7 +253,24 @@ void PickPlaceTask::executeTask()
   if (step_success)
   {
     auto direction = geometry_msgs::msg::Vector3();
-    direction.z = -pick_place_task_param_.pick_offset;
+    direction.y = object_pose_ptr_->pose.position.y - place_pose_ptr_->pose.position.y;
+
+    step_success = comp_path_skill->computeRelative(pick_place_task_param_.arm_group_name,
+                                                    direction, robot_trajectory);
+    if (step_success)
+    {
+      robot_trajectory->getRobotTrajectoryMsg(trajectory_msg);
+      step_success = exec_traj_skill->execute_trajectory(pick_place_task_param_.arm_group_name,
+                                                         trajectory_msg);
+    }
+    rclcpp::sleep_for(1s);
+  }
+
+  if (step_success)
+  {
+    auto direction = geometry_msgs::msg::Vector3();
+    direction.z = object_pose_ptr_->pose.position.z - place_pose_ptr_->pose.position.z +
+                  pick_place_task_param_.place_offset;
     step_success = comp_path_skill->computeRelative(pick_place_task_param_.arm_group_name,
                                                     direction, robot_trajectory);
     if (step_success)
@@ -237,17 +291,22 @@ void PickPlaceTask::executeTask()
     rclcpp::sleep_for(1s);
   }
 
-  /**************************
-   * Place Object *
-   **************************/
-
-  /** Open Hand **/
-
-  /** Forbid collision(hand,object) **/
-
-  /** Detach Object **/
-
   // Set retreat direction
+
+  if (step_success)
+  {
+    auto direction = geometry_msgs::msg::Vector3();
+    direction.z = pick_place_task_param_.retreat_offset;
+    step_success = comp_path_skill->computeRelative(pick_place_task_param_.arm_group_name,
+                                                    direction, robot_trajectory);
+    if (step_success)
+    {
+      robot_trajectory->getRobotTrajectoryMsg(trajectory_msg);
+      step_success = exec_traj_skill->execute_trajectory(pick_place_task_param_.arm_group_name,
+                                                         trajectory_msg);
+    }
+    rclcpp::sleep_for(1s);
+  }
 
   /**************************
    * Return home *
