@@ -4,26 +4,19 @@ namespace robot_skills
 {
 static const rclcpp::Logger LOGGER = rclcpp::get_logger("execute_trajectory_skill");
 
-ExecuteTrajectorySkill::ExecuteTrajectorySkill(rclcpp::Node::SharedPtr node) : node_(node)
+ExecuteTrajectorySkill::ExecuteTrajectorySkill(rclcpp::Node::SharedPtr node,
+                                               moveit_cpp::MoveItCppPtr& moveit_cpp_ptr)
+  : node_(node), moveit_cpp_ptr_(moveit_cpp_ptr)
 {
   RCLCPP_INFO(LOGGER, "create execute trajectory skill");
 }
 
 ExecuteTrajectorySkill::~ExecuteTrajectorySkill() = default;
 
-bool ExecuteTrajectorySkill::execute_trajectory(const std::string group_name,
-                                                const moveit_msgs::msg::RobotTrajectory& trajectory)
+bool ExecuteTrajectorySkill::execute_trajectory(
+    const std::string group_name, const robot_trajectory::RobotTrajectoryPtr& robot_trajectory)
 {
-  move_group.reset();
-  move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, group_name);
-  moveit::core::MoveItErrorCode res = move_group->execute(trajectory);
-  if (res != moveit::core::MoveItErrorCode::SUCCESS)
-  {
-    return false;
-  }
-  else
-  {
-    return true;
-  }
+  bool success = moveit_cpp_ptr_->execute(group_name, robot_trajectory);
+  return success;
 }
 }  // namespace robot_skills
