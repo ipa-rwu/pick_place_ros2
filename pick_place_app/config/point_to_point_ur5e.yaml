@@ -1,17 +1,17 @@
-point_to_point_demo:
+point_to_point_task:
   ros__parameters:
-    arm_group_name: "arm"
-    arm_hand_group_name: "arm_hand"
-    start_state: detect
-    ik_frame: "tool_tip"
-    planning_plugin: "ompl_interface/OMPLPlanner"
-    planner_id: "RRTstarkConfigDefault"
-    planning_timeout: 10.0
-    num_planning_attempts: 10
-    offset: 0.0
-    box_size: [0.017, 0.017, 0.017]
-    step_size: 0.005
-    min_fraction: 0.50
-    max_acceleration_scaling_factor: 0.3
-    max_velocity_scaling_factor: 0.1
+    plan_group: "arm"
+    start_state: "detect"
     waypoints_file: "waypoints.yaml"
+    box_size: [0.017, 0.017, 0.017]
+    offset: 0.02
+    ik_frame: "tool_tip"
+    compute_path_moveitcpp_skill:
+      planning_pipeline: "ompl"
+      planner_id: "RRTstarkConfigDefault"
+      planning_attempts: 10
+      step_size: 0.005
+      min_fraction: 0.50
+      max_acceleration_scaling_factor: 0.3
+      max_velocity_scaling_factor: 0.1
+      planning_time: 1.0

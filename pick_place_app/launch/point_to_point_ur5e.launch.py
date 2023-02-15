@@ -6,13 +6,20 @@ from moveit_configs_utils import MoveItConfigsBuilder
 
 
 def generate_launch_description():
-    moveit_config = MoveItConfigsBuilder(
-        "ur5e_workcell_fake", package_name="ur5e_cell_moveit_config"
-    ).to_dict()
+    moveit_config = (
+        MoveItConfigsBuilder("ur5e_workcell", package_name="ur5e_cell_moveit_config")
+        .robot_description(file_path="config/ur5e_workcell.urdf.xacro")
+        .moveit_cpp(
+            file_path=get_package_share_directory("pick_place_app")
+            + "/config/moveitcpp.yaml"
+        )
+        .to_moveit_configs()
+    )
 
     point_to_point_demo = Node(
         package="pick_place_app",
         executable="point_to_point_demo",
+        name="point_to_point_task",
         output="screen",
         # prefix=["gdb -ex run --args"],
         # prefix=["xterm -e gdb -ex run --args"],
@@ -22,7 +29,7 @@ def generate_launch_description():
                 "config",
                 "point_to_point_ur5e.yaml",
             ),
-            moveit_config,
+            moveit_config.to_dict(),
         ],
     )
 

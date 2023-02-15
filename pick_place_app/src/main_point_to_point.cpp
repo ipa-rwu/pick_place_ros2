@@ -17,13 +17,17 @@ int main(int argc, char** argv)
     executor.spin();
     executor.remove_node(node->get_node_base_interface());
   });
+  rclcpp::sleep_for(std::chrono::seconds(1));
 
   robot_application::PointToPoinTask::Parameters point_to_point_parameters;
   point_to_point_parameters.loadParameters(node);
 
   robot_application::PointToPoinTask point_to_point_task(node, point_to_point_parameters);
 
-  point_to_point_task.executeTask();
+  while (rclcpp::ok())
+  {
+    point_to_point_task.executeTask();
+  }
 
   spin_thread->join();
   rclcpp::shutdown();
