@@ -1,20 +1,10 @@
 #include "pick_place_app/skills/detect_aruco_marker_skill.h"
-#include <rosparam_shortcuts/rosparam_shortcuts.h>
 
 using namespace std::chrono_literals;
 
 namespace robot_skills
 {
 static const rclcpp::Logger LOGGER = rclcpp::get_logger("detect_aruco_marker_skill");
-
-void DetectArucoMarkerSkill::Parameters::loadParameters(const rclcpp::Node::SharedPtr& node)
-{
-  size_t errors = 0;
-  errors += !rosparam_shortcuts::get(node, "marker_topic_name",
-                                     marker_topic_name);  //
-
-  rosparam_shortcuts::shutdownIfError(errors);
-}
 
 DetectArucoMarkerSkill::DetectArucoMarkerSkill(rclcpp::Node::SharedPtr node,
                                                const DetectArucoMarkerSkill::Parameters& parameters)
@@ -38,6 +28,8 @@ void DetectArucoMarkerSkill::getMarkerCallback(const aruco_msgs::msg::MarkerArra
   {
     for (const auto req_marker_id : req_markers_)
     {
+      RCLCPP_INFO_ONCE(LOGGER, "Check Marker [%d] pose", req_marker_id);
+
       auto res = std::find_if(msg.markers.begin(), msg.markers.end(),
                               [req_marker_id](const aruco_msgs::msg::Marker& x) {
                                 return (int)x.id == req_marker_id;
@@ -54,8 +46,8 @@ void DetectArucoMarkerSkill::getMarkerCallback(const aruco_msgs::msg::MarkerArra
           std::vector<geometry_msgs::msg::PoseStamped> tmp;
 
           tmp.push_back(marker_posestamped);
-          RCLCPP_DEBUG(LOGGER, "Get marker ID:[%d]: %s", res->id,
-                       geometry_msgs::msg::to_yaml(res->pose.pose).c_str());
+          RCLCPP_INFO(LOGGER, "Get marker ID:[%d]: %s", res->id,
+                      geometry_msgs::msg::to_yaml(res->pose.pose).c_str());
           res_markers_.insert(std::make_pair(req_marker_id, tmp));
         }
         else

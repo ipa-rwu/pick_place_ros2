@@ -21,8 +21,16 @@ public:
   struct Parameters
   {
     std::string marker_topic_name;
-    int find_marker_timeout_seconds = 10;
-    void loadParameters(const rclcpp::Node::SharedPtr& node);
+    int find_marker_timeout_seconds;
+
+    void loadParameters(const rclcpp::Node::SharedPtr& node)
+    {
+      std::string ns = "detect_aruco_marker_skill.";
+
+      node->get_parameter_or(ns + "marker_topic_name", marker_topic_name,
+                             std::string("marker_publisher/markers"));
+      node->get_parameter_or(ns + "find_marker_timeout_seconds", find_marker_timeout_seconds, 5);
+    }
   };
 
   DetectArucoMarkerSkill(rclcpp::Node::SharedPtr node,
@@ -30,7 +38,6 @@ public:
 
   ~DetectArucoMarkerSkill();
 
-  double getMovingAvg(const std::vector<double>& vec, std::size_t requested_window_width);
   bool getArucoPosestamps(const std::vector<int>& marker_ids,
                           std::map<int, geometry_msgs::msg::PoseStamped>& result);
 
