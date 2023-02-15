@@ -3,13 +3,11 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <rclcpp/rclcpp.hpp>
 
-#include "pick_place_app/skills/compute_path_skill.h"
+#include "pick_place_app/skills/compute_path_with_moveitcpp_skill.h"
 #include "pick_place_app/skills/execute_trajectory_skill.h"
 #include "pick_place_app/skills/io_gripper_with_ur_skill.h"
 #include "pick_place_app/skills/modify_planning_scene_skill.h"
 #include "pick_place_app/skills/detect_aruco_marker_skill.h"
-
-#include <moveit/planning_scene_interface/planning_scene_interface.h>
 
 namespace robot_application
 {
@@ -20,26 +18,45 @@ public:
   {
     std::string arm_group_name;
     std::string detect_state_name;
-    double pick_offset;
     std::vector<double> box_size;
-    double lift_distance;
-    double place_offset;
+    std::vector<double> container_size;
+    std::vector<double> pre_pick_offset;
+    std::vector<double> pick_offset;
+    std::vector<double> pre_place_offset;
+    std::vector<double> place_offset;
+    std::vector<double> retreat_offset;
     int object_marker_id;
     int place_marker_id;
     std::string path_constraints_file;
-    double retreat_offset;
+    std::string ik_frame;
 
-    void loadParameters(const rclcpp::Node::SharedPtr& node);
+    void loadParameters(const rclcpp::Node::SharedPtr& node)
+    {
+      node->get_parameter("arm_group_name", arm_group_name);
+      node->get_parameter("detect_state_name", detect_state_name);
+      node->get_parameter("pre_pick_offset", pre_pick_offset);
+      node->get_parameter("pick_offset", pick_offset);
+      node->get_parameter("pre_place_offset", pre_place_offset);
+      node->get_parameter("place_offset", place_offset);
+      node->get_parameter("retreat_offset", retreat_offset);
+      node->get_parameter("place_marker_id", place_marker_id);
+      node->get_parameter("object_marker_id", object_marker_id);
+
+      node->get_parameter_or("path_constraints_file", path_constraints_file, std::string(""));
+      node->get_parameter_or("ik_frame", ik_frame, std::string(""));
+      node->get_parameter_or("box_size", box_size, std::vector<double>({ 0.017, 0.017, 0.017 }));
+      node->get_parameter_or("container_size", container_size,
+                             std::vector<double>({ 0.06, 0.07, 0.006 }));
+    }
   };
 
   PickPlaceTask(const rclcpp::Node::SharedPtr& node, const Parameters& parameters);
   void initSkills();
-  void loadRobot();
   void executeTask();
 
 protected:
-  robot_skills::ComputePathSkill::SharedPtr comp_path_skill;
-  robot_skills::ComputePathSkill::Parameters parameters_comp_path_skill;
+  robot_skills::ComputePathWithMoveItCppSkill::SharedPtr comp_path_skill;
+  robot_skills::ComputePathWithMoveItCppSkill::Parameters parameters_comp_path_skill;
 
   robot_skills::ExecuteTrajectorySkill::SharedPtr exec_traj_skill;
 
@@ -56,16 +73,11 @@ protected:
 
 private:
   rclcpp::Node::SharedPtr node_;
-  planning_scene::PlanningScenePtr planning_scene_;
-  moveit::core::RobotModelPtr robot_model_;
-  PickPlaceTask::Parameters pick_place_task_param_;
-  robot_model_loader::RobotModelLoaderPtr rm_loader_;
-  moveit::core::RobotStatePtr current_robot_state_;
-  moveit::planning_interface::PlanningSceneInterfacePtr psi_;
+  PickPlaceTask::Parameters param_pick_place_;
   geometry_msgs::msg::PoseStamped object_pose_;
   geometry_msgs::msg::PoseStamped::SharedPtr object_pose_ptr_;
   geometry_msgs::msg::PoseStamped::SharedPtr place_pose_ptr_;
-  planning_scene_monitor::PlanningSceneMonitorPtr psm_;
+  moveit_cpp::MoveItCppPtr moveit_cpp_ptr_;
 };
 
 }  // namespace robot_application

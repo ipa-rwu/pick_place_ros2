@@ -4,5 +4,10 @@ path_constraints:
   - joint_name: elbow_joint
     position: 0.0
     tolerance_above: 0.0
-    tolerance_below: 1.57
+    tolerance_below: 1.72
+    weight: 1.0
+  - joint_name: wrist_1_joint
+    position: 0.0
+    tolerance_above: 0.0
+    tolerance_below: 1.6
     weight: 1.0
