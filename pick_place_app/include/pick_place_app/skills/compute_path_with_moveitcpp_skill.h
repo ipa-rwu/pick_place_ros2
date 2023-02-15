@@ -1,16 +1,13 @@
-#ifndef ROBOT_SKILLS__COMPUTE_PATH_SKILL_H_
-#define ROBOT_SKILLS__COMPUTE_PATH_SKILL_H_
+#ifndef ROBOT_SKILLS__COMPUTE_PATH_WITH_MOVEITCPP_SKILL_H_
+#define ROBOT_SKILLS__COMPUTE_PATH_WITH_MOVEITCPP_SKILL_H_
 
 #include <rclcpp/rclcpp.hpp>
 #include <moveit/move_group_interface/move_group_interface.h>
-#include <moveit/planning_interface/planning_interface.h>
-#include <moveit/robot_model_loader/robot_model_loader.h>
-#include <moveit_msgs/msg/motion_plan_request.hpp>
-#include <moveit/planning_pipeline/planning_pipeline.h>
 #include <moveit/robot_state/conversions.h>
-#include <moveit/planning_scene_monitor/planning_scene_monitor.h>
 #include <moveit/trajectory_processing/time_optimal_trajectory_generation.h>
-#include <moveit/trajectory_processing/time_parameterization.h>
+#include <moveit/moveit_cpp/moveit_cpp.h>
+#include <moveit/moveit_cpp/planning_component.h>
+#include <moveit/planning_scene_monitor/planning_scene_monitor.h>
 
 #include <moveit_msgs/msg/constraints.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
@@ -21,47 +18,58 @@
 
 namespace robot_skills
 {
-class ComputePathSkill
+class ComputePathWithMoveItCppSkill
 {
 public:
   /**
    * @brief
    *
    */
-  RCLCPP_SMART_PTR_DEFINITIONS(ComputePathSkill)
+  RCLCPP_SMART_PTR_DEFINITIONS(ComputePathWithMoveItCppSkill)
 
   struct Parameters
   {
-    std::string planner_id =
-        "ompl_interface/OMPLPlanner";  // specific planner id in a planning pipeline
-    double planning_timeout = 10.0;
-    int num_planning_attempts = 10;
-    std::string ik_frame;
-    double goal_position_tolerance = 1e-4;     // 0.1 mm
-    double goal_orientation_tolerance = 1e-3;  // ~0.1 deg
-    double goal_joint_tolerance = 1e-4;
-    double step_size = 0.005;
-    double jump_threshold = 0.0;
-    double max_velocity_scaling_factor = 0.5;
-    double max_acceleration_scaling_factor = 0.5;
-    double min_fraction = 0.7;
-    std::string planning_plugin;
-    void loadParameters(const rclcpp::Node::SharedPtr& node);
+    std::string planner_id;
+    double planning_time;
+    int planning_attempts;
+    double goal_position_tolerance;     // 0.1 mm
+    double goal_orientation_tolerance;  // ~0.1 deg
+    double goal_joint_tolerance;
+    double step_size;
+    double jump_threshold;
+    double max_velocity_scaling_factor;
+    double max_acceleration_scaling_factor;
+    double min_fraction;
+    std::string planning_pipeline;
+    std::string GET_PLANNING_SCENE_SERVICE_NAME;
+    std::string PILZ_PLANNING_PIPELINE = "pilz_industrial_motion_planner";
+
+    void loadParameters(const rclcpp::Node::SharedPtr& node)
+    {
+      std::string ns = "compute_path_moveitcpp_skill.";
+      node->get_parameter_or(ns + "planner_id", planner_id, std::string(""));
+      node->get_parameter_or(ns + "planning_pipeline", planning_pipeline, std::string(""));
+      node->get_parameter_or(ns + "planning_time", planning_time, 5.0);
+      node->get_parameter_or(ns + "planning_attempts", planning_attempts, 5);
+      node->get_parameter_or(ns + "max_velocity_scaling_factor", max_velocity_scaling_factor, 0.5);
+      node->get_parameter_or(ns + "max_acceleration_scaling_factor",
+                             max_acceleration_scaling_factor, 0.5);
+      node->get_parameter_or(ns + "min_fraction", min_fraction, 0.7);
+      node->get_parameter_or(ns + "jump_threshold", jump_threshold, 0.0);
+      node->get_parameter_or(ns + "step_size", step_size, 0.005);
+      node->get_parameter_or(ns + "goal_joint_tolerance", goal_joint_tolerance, 1e-4);
+      node->get_parameter_or(ns + "goal_orientation_tolerance", goal_orientation_tolerance, 1e-3);
+      node->get_parameter_or(ns + "goal_position_tolerance", goal_position_tolerance, 1e-4);
+      node->get_parameter_or(ns + "GET_PLANNING_SCENE_SERVICE_NAME",
+                             GET_PLANNING_SCENE_SERVICE_NAME,
+                             std::string("compute_path_moveitcpp_skill/get_planning_scene"));
+    }
   };
 
-  struct Specification
-  {
-    moveit::core::RobotModelConstPtr model;
-    std::string ns{ "ompl" };
-    std::string pipeline{ "ompl" };
-    std::string adapter_param{ "request_adapters" };
-  };
+  ComputePathWithMoveItCppSkill(rclcpp::Node::SharedPtr node, const Parameters& parameters,
+                                moveit_cpp::MoveItCppPtr& moveit_cpp_ptr);
 
-  ComputePathSkill(rclcpp::Node::SharedPtr node, const Parameters& parameters,
-                   robot_model_loader::RobotModelLoaderPtr robot_model_loader,
-                   planning_scene_monitor::PlanningSceneMonitorPtr psm);
-
-  ~ComputePathSkill();
+  ~ComputePathWithMoveItCppSkill();
 
   moveit::core::RobotState getRobotStartState(std::vector<std::string> joint_names,
                                               std::vector<double> joint_state);
@@ -69,28 +77,24 @@ public:
   /**
    * @brief Plan from current scene to target RobotState
    *
-   * @param current_scene
    * @param target_robot_state
    * @param jmg
-   * @param timeout
    * @param result
    * @param path_constraints
    * @return true
    * @return false
    */
-  bool
-  plan(const moveit::core::RobotState& target_robot_state, const moveit::core::JointModelGroup* jmg,
-       double timeout, robot_trajectory::RobotTrajectoryPtr& result,
-       const moveit_msgs::msg::Constraints& path_constraints = moveit_msgs::msg::Constraints());
+  bool plan(const moveit::core::RobotState& target_robot_state,
+            const moveit::core::JointModelGroup* jmg, robot_trajectory::RobotTrajectoryPtr& result,
+            const moveit_msgs::msg::Constraints& path_constraints = moveit_msgs::msg::Constraints());
 
   /**
    * @brief Plan from current scene to a Isometry3d in planning frame
    *
    * @param link
    * @param offset
-   * @param target
+   * @param target_eigen
    * @param jmg
-   * @param timeout
    * @param result
    * @param path_constraints
    * @return true
@@ -98,7 +102,7 @@ public:
    */
   bool plan(const moveit::core::LinkModel& link, const Eigen::Isometry3d& offset,
             const Eigen::Isometry3d& target_eigen, const moveit::core::JointModelGroup* jmg,
-            double timeout, robot_trajectory::RobotTrajectoryPtr& result,
+            robot_trajectory::RobotTrajectoryPtr& result,
             const moveit_msgs::msg::Constraints& path_constraints = moveit_msgs::msg::Constraints());
 
   bool planCartesianToPose(const std::string& group,
@@ -112,15 +116,13 @@ public:
    *
    * @param group
    * @param waypoints pose of waypoint in global(planning) frame
-   * @param current_robot_state
    * @param result
    * @return true
    * @return false
    */
-  bool planCartesian(const std::string& group,
-                     const std::vector<geometry_msgs::msg::Pose>& waypoints,
-                     const moveit::core::RobotState& current_robot_state,
-                     robot_trajectory::RobotTrajectoryPtr& result);
+  bool planCartesianMoveGroup(const std::string& group,
+                              const std::vector<geometry_msgs::msg::Pose>& waypoints,
+                              robot_trajectory::RobotTrajectoryPtr& result);
 
   bool computePath(
       const std::string& group, const boost::any& goal,
@@ -128,29 +130,22 @@ public:
       bool compute_cartesian_path = false,
       const moveit_msgs::msg::Constraints& path_constraints = moveit_msgs::msg::Constraints());
 
-  bool planRelativeCartesian(moveit::core::RobotState& current_robot_state,
-                             const std::string& group, const moveit::core::LinkModel& link,
-                             geometry_msgs::msg::Vector3 direction,
-                             robot_trajectory::RobotTrajectoryPtr& robot_trajectory);
-
   bool computeRelative(const std::string& group, geometry_msgs::msg::Vector3 direction,
-                       robot_trajectory::RobotTrajectoryPtr& robot_trajectory,
+                       std::vector<robot_trajectory::RobotTrajectoryPtr>& robot_trajectories,
                        const std::string& ik_frame_id = "");
 
   bool checkCollision(const planning_scene::PlanningSceneConstPtr& current_scene);
 
-  planning_pipeline::PlanningPipelinePtr planning_pipeline_;
+  void setPlanner(const std::string& planning_pipeline = "", const std::string& planner_id = "");
 
 protected:
   /**
-   * @brief initial a motion plan request
+   * @brief initial a Planning parameter
    *
-   * @param req moveit_msgs::msg::MotionPlanRequest
-   * @param jmg target joint model group for planning
-   * @param timeout
+   * @param plan_params
    */
-  void initMotionPlanRequest(moveit_msgs::msg::MotionPlanRequest& req,
-                             const moveit::core::JointModelGroup* jmg, double timeout);
+  void
+  initPlanComponentParameters(moveit_cpp::PlanningComponent::PlanRequestParameters& plan_params);
 
   /**
    * @brief Check goal type, transfer into moveit::core::RobotState
@@ -194,12 +189,13 @@ protected:
 private:
   rclcpp::Node::SharedPtr node_;
   moveit::planning_interface::MoveGroupInterfacePtr move_group_;
-
-  rclcpp::Publisher<moveit_msgs::msg::DisplayTrajectory>::SharedPtr traj_publisher_;
-  ComputePathSkill::Parameters parameters_;
+  ComputePathWithMoveItCppSkill::Parameters parameters_;
+  moveit_cpp::MoveItCppPtr moveit_cpp_ptr_;
+  moveit_cpp::PlanningComponentPtr planning_component_ptr_;
   planning_scene_monitor::PlanningSceneMonitorPtr psm_;
-  robot_model_loader::RobotModelLoaderPtr robot_model_loader_;
   trajectory_processing::TimeOptimalTrajectoryGeneration time_parametrization_;
+  moveit_cpp::PlanningComponent::PlanRequestParameters plan_params_;
+  bool set_planner_called_;
 };
 
 }  // namespace robot_skills
