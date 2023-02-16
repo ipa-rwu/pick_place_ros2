@@ -8,15 +8,14 @@ pick_place_demo:
     ik_frame: "tool_tip"
     pre_pick_offset: [0.002, -0.013, 0.15]
     pick_offset: [0.0, 0.0, 0.040] # pincer_height:0.014
-    pre_place_offset: [0.006, -0.006, 0.15]
-    place_offset: [0.0, 0.0, 0.07]
+    pre_place_offset: [0.006, -0.008, 0.15]
+    place_offset: [0.0, 0.0, 0.08]
     retreat_offset: [0.0, 0.0, 0.3]
     box_size: [0.017, 0.017, 0.017]
     lift_distance: 0.15
     path_constraints_file: "path_constraints.yaml"
     io_gripper_with_ur_skill:
       io_service_name: "/io_and_status_controller/set_io"
-      # io_service_name: "/mock_io_server/set_io"
       timeout: 5.0
     detect_aruco_marker_skill:
       marker_topic_name: "/marker_publisher/markers"
