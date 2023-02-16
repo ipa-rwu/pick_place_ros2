@@ -1,4 +1,3 @@
-# ros2 launch realsense2_camera rs_launch.py device_type:=d435 depth_width:=640 depth_height:=480 depth_fps:=30.0 infra1_width:=640 infra1_height:=480 infra1_fps:=30.0 publish_tf:=false
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -36,9 +35,14 @@ def generate_launch_description():
     aruco_detection_launch = IncludeLaunchDescription(
         launch_description_source=PythonLaunchDescriptionSource(
             PathJoinSubstitution(
-                [FindPackageShare("aruco_ros"), "launch", "marker_publisher.py"]
+                [FindPackageShare("aruco_ros"), "launch", "marker_publisher.launch.py"]
             )
-        )
+        ),
+        launch_arguments={
+            "camera_frame": "camera_color_optical_frame",
+            "reference_frame": "world",
+            "marker_size_arg": "0.02",
+        }.items(),
     )
 
     ld = LaunchDescription(
