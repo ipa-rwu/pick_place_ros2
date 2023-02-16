@@ -1,0 +1,19 @@
+waypoints:
+  frame_id: panda_link0
+  poses:
+    - position:
+        x: 0.24
+        y: 0.45
+        z: 0.15
+    - position:
+        x: 0.24
+        y: 0.45
+        z: 0.01
+    - position:
+        x: 0.14
+        y: 0.19
+        z: 0.15
+    - position:
+        x: 0.14
+        y: 0.19
+        z: 0.01
