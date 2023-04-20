@@ -22,7 +22,8 @@
 
   <exec_depend>controller_manager</exec_depend>
   <exec_depend>rclcpp_components</exec_depend>
-  <exec_depend>aruco_ros</exec_depend>
+  <exec_depend>ur5e_cell_moveit_config</exec_depend>
+
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_cmake_clang_format</test_depend>
