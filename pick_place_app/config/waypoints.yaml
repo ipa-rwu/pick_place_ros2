@@ -3,17 +3,17 @@ waypoints:
   poses:
     - position:
         x: -0.17
-        y: 0.16
+        y: 0.163
         z: 1.25
     - position:
         x: -0.17
-        y: 0.16
-        z: 1.06
+        y: 0.163
+        z: 1.067
     - position:
         x: -0.17
-        y: -0.10
+        y: -0.103
         z: 1.25
     - position:
         x: -0.17
-        y: -0.10
+        y: -0.103
         z: 1.10

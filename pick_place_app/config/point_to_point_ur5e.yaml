@@ -2,7 +2,7 @@ point_to_point_task:
   ros__parameters:
     plan_group: "arm"
     start_state: "detect"
-    waypoints_file: "waypoints_base_ur5e.yaml"
+    waypoints_file: "waypoints.yaml"
     box_size: [0.017, 0.017, 0.017]
     offset: 0.02
     ik_frame: "tool_tip"
