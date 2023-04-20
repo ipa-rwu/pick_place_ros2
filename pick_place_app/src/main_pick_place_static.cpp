@@ -17,13 +17,17 @@ int main(int argc, char** argv)
     executor.spin();
     executor.remove_node(node->get_node_base_interface());
   });
+  rclcpp::sleep_for(std::chrono::seconds(1));
 
   robot_application::PickPlaceStaticTask::Parameters parameters;
   parameters.loadParameters(node);
 
   robot_application::PickPlaceStaticTask pick_place_static(node, parameters);
 
-  pick_place_static.executeTask();
+  while (rclcpp::ok())
+  {
+    pick_place_static.executeTask();
+  }
 
   spin_thread->join();
   rclcpp::shutdown();

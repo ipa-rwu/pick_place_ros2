@@ -1,11 +1,19 @@
 waypoints:
-  frame_id: base_link
+  frame_id: world
   poses:
     - position:
-        x: 0.25
-        y: 0.70
-        z: 0.3
+        x: -0.17
+        y: 0.163
+        z: 1.25
     - position:
-        x: -0.15
-        y: 0.55
-        z: 0.3
+        x: -0.17
+        y: 0.163
+        z: 1.067
+    - position:
+        x: -0.17
+        y: -0.103
+        z: 1.25
+    - position:
+        x: -0.17
+        y: -0.103
+        z: 1.10

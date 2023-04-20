@@ -1,19 +1,7 @@
 #include "pick_place_app/skills/io_gripper_with_ur_skill.h"
-#include <rosparam_shortcuts/rosparam_shortcuts.h>
-
 namespace robot_skills
 {
 static const rclcpp::Logger LOGGER = rclcpp::get_logger("io_gripper_with_ur_skill");
-
-void IOGripperWithURSkill::Parameters::loadParameters(const rclcpp::Node::SharedPtr& node)
-{
-  size_t errors = 0;
-  errors += !rosparam_shortcuts::get(node, "io_service_name",
-                                     io_service_name);  //
-  RCLCPP_INFO(LOGGER, "param: %s", io_service_name.c_str());
-
-  rosparam_shortcuts::shutdownIfError(errors);
-}
 
 IOGripperWithURSkill::IOGripperWithURSkill(rclcpp::Node::SharedPtr node,
                                            const IOGripperWithURSkill::Parameters& parameters)
@@ -46,19 +34,33 @@ bool IOGripperWithURSkill::setGripperState(const std::string command)
     RCLCPP_INFO(LOGGER, "Connected to server : %s", parameters_.io_service_name.c_str());
     auto req = std::make_shared<ur_msgs::srv::SetIO::Request>();
     req->fun = req->FUN_SET_DIGITAL_OUT;
+
+    if (open == 1)
+    {
+      req->state = 0;
+      req->pin = static_cast<int8_t>(0);  // Pin 0 is close
+      auto res_future = client->async_send_request(req);
+      res_future = client->async_send_request(req);
+      success = res_future.get()->success;
+      RCLCPP_INFO(LOGGER, "%s gripper conclude : %s", ((open == 1) ? "Open" : "Close"),
+                  ((success == false) ? "Failed" : "Succeeded"));
+    }
+
     req->state = 1;
     req->pin = static_cast<int8_t>(open);  // Pin 1 is open
-
     auto res_future = client->async_send_request(req);
     success = res_future.get()->success;
     RCLCPP_INFO(LOGGER, "%s gripper initialise : %s", ((open == 1) ? "Open" : "Close"),
                 ((success == false) ? "Failed" : "Succeeded"));
 
-    req->state = 0;
-    res_future = client->async_send_request(req);
-    success = res_future.get()->success;
-    RCLCPP_INFO(LOGGER, "%s gripper conclude : %s", ((open == 1) ? "Open" : "Close"),
-                ((success == false) ? "Failed" : "Succeeded"));
+    if (open == 1)
+    {
+      req->state = 0;
+      res_future = client->async_send_request(req);
+      success = res_future.get()->success;
+      RCLCPP_INFO(LOGGER, "%s gripper conclude : %s", ((open == 1) ? "Open" : "Close"),
+                  ((success == false) ? "Failed" : "Succeeded"));
+    }
   }
   return success;
 }

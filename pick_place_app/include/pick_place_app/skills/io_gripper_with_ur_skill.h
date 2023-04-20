@@ -20,8 +20,15 @@ public:
   struct Parameters
   {
     std::string io_service_name;
-    double timeout = 5.0;
-    void loadParameters(const rclcpp::Node::SharedPtr& node);
+    double timeout;
+
+    void loadParameters(const rclcpp::Node::SharedPtr& node)
+    {
+      std::string ns = "io_gripper_with_ur_skill.";
+      node->get_parameter_or(ns + "io_service_name", io_service_name,
+                             std::string("mock_io_server/set_io"));
+      node->get_parameter_or(ns + "timeout", timeout, 5.0);
+    }
   };
 
   IOGripperWithURSkill(rclcpp::Node::SharedPtr node,
