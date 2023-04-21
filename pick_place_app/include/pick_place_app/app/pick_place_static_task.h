@@ -10,8 +10,6 @@
 
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
 
-#include <rosparam_shortcuts/rosparam_shortcuts.h>
-
 namespace robot_application
 {
 class PickPlaceStaticTask
@@ -49,11 +47,6 @@ public:
       node->get_parameter_or("ik_frame", ik_frame, std::string(""));
       node->get_parameter_or("object_name", object_name, std::string("box"));
       node->get_parameter_or("box_size", box_size, std::vector<double>({ 0.017, 0.017, 0.017 }));
-
-      size_t errors = 0;
-      errors += !rosparam_shortcuts::get(node, "object_pose", object_pose);
-      errors += !rosparam_shortcuts::get(node, "place_pose", place_pose);
-      rosparam_shortcuts::shutdownIfError(errors);
     }
   };
 
