@@ -1,5 +1,4 @@
 #include "pick_place_app/skills/modify_planning_scene_skill.h"
-#include <rosparam_shortcuts/rosparam_shortcuts.h>
 #include <geometric_shapes/solid_primitive_dims.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 

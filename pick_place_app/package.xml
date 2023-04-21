@@ -11,11 +11,9 @@
 
   <build_depend>rclcpp_components</build_depend>
 
-  <!-- <depend>moveit_task_constructor_core</depend> -->
   <depend>moveit_ros_planning_interface</depend>
   <depend>moveit_core</depend>
   <depend>rclcpp</depend>
-  <depend>rosparam_shortcuts</depend>
   <depend>ur_msgs</depend>
   <depend>yaml_cpp_vendor</depend>
   <depend>aruco_msgs</depend>

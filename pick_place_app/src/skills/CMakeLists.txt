@@ -20,7 +20,6 @@ set(SKILL_DEPS
 	rclcpp
 	pluginlib
 	rclcpp_components
-	rosparam_shortcuts
 	moveit_core
 	moveit_ros_planning_interface
 	moveit_ros_planning

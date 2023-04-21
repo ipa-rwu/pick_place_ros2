@@ -13,7 +13,6 @@ set(APP_DEPS
 	ament_cmake
 	rclcpp
 	rclcpp_components
-	rosparam_shortcuts
 	moveit_core
 	moveit_ros_planning_interface
 	moveit_ros_planning

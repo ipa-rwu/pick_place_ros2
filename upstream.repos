@@ -1,8 +1,4 @@
 repositories:
-  rosparam_shortcuts:
-      type: git
-      url: https://github.com/PickNikRobotics/rosparam_shortcuts.git
-      version: ros2
   ur5e_cell:
       type: git
       url: https://github.com/ipa-cmh/ur5e_cell
