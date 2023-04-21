@@ -1,5 +1,5 @@
 repositories:
   ur5e_cell:
       type: git
-      url: https://github.com/ipa-cmh/ur5e_cell
+      url: https://github.com/ipa-rwu/ur5e_cell
       version: main
